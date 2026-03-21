@@ -113,11 +113,11 @@ https://your-domain.railway.app/mcp
 ## Development
 
 ```bash
-npm install          # install deps
-npm run build        # TypeScript → build/
-npm test             # run 79 tests
-npm run test:watch   # watch mode
-npm run dev          # watch + run (tsx)
+pnpm install          # install deps
+pnpm build            # TypeScript → build/
+pnpm test             # run 79 tests
+pnpm test:watch       # watch mode
+pnpm dev              # watch + run (tsx)
 ```
 
 ## Tech stack
