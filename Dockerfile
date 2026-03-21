@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:current-alpine AS builder
 
 WORKDIR /build
 
@@ -12,7 +12,7 @@ COPY src/ ./src/
 RUN pnpm build
 
 # ── production image ──────────────────────────────────────────────────────────
-FROM node:22-alpine
+FROM node:current-alpine
 
 WORKDIR /app
 
