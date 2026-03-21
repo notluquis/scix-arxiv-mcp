@@ -14,10 +14,21 @@ export interface ArxivPaper {
   absUrl: string;
 }
 
+export interface ArxivSearchOptions {
+  maxResults?: number;
+  sortBy?: 'relevance' | 'lastUpdatedDate' | 'submittedDate';
+  sortOrder?: 'descending' | 'ascending';
+  /** YYYY-MM-DD — filter papers submitted on or after this date */
+  dateFrom?: string;
+  /** YYYY-MM-DD — filter papers submitted on or before this date */
+  dateTo?: string;
+  /** arXiv category list, e.g. ['cs.LG', 'cs.CL'] */
+  categories?: string[];
+}
+
 function parseAtomFeed(xml: string): ArxivPaper[] {
   const papers: ArxivPaper[] = [];
 
-  // Split into <entry> blocks
   const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
   let match: RegExpExecArray | null;
 
@@ -60,57 +71,72 @@ function parseAtomFeed(xml: string): ArxivPaper[] {
   return papers;
 }
 
-export async function arxivSearch(
-  query: string,
-  maxResults = 10,
-  sortBy = 'relevance',
-  sortOrder = 'descending'
-): Promise<ArxivPaper[]> {
-  const params = new URLSearchParams({
-    search_query: query,
-    max_results: String(maxResults),
-    sortBy,
-    sortOrder,
-  });
+/** Convert YYYY-MM-DD → YYYYMM for arXiv date range format. */
+function toArxivDate(date: string): string {
+  return date.replace(/-/g, '').slice(0, 6);
+}
 
+/**
+ * Build the full arXiv API query string, appending date and category filters
+ * without letting URLSearchParams double-encode the `[` `]` `*` `+TO+` tokens
+ * that the arXiv Atom API expects.
+ */
+function buildArxivUrl(
+  query: string,
+  opts: ArxivSearchOptions
+): string {
+  const parts: string[] = [query];
+
+  if (opts.dateFrom || opts.dateTo) {
+    const from = opts.dateFrom ? toArxivDate(opts.dateFrom) : '*';
+    const to = opts.dateTo ? toArxivDate(opts.dateTo) : '*';
+    parts.push(`submittedDate:[${from}* TO ${to}*]`);
+  }
+
+  if (opts.categories?.length) {
+    const catFilter = opts.categories.map(c => `cat:${c}`).join(' OR ');
+    parts.push(`(${catFilter})`);
+  }
+
+  const fullQuery = parts.join(' AND ');
+
+  // URLSearchParams encodes brackets as %5B%5D and * as %2A — arXiv API
+  // needs them literal in the query string. Build manually instead.
+  const encoded = encodeURIComponent(fullQuery)
+    .replace(/%5B/g, '[').replace(/%5D/g, ']')
+    .replace(/%2A/g, '*').replace(/%20/g, '+')
+    .replace(/%2B/g, '+');
+
+  const sortBy = opts.sortBy ?? 'relevance';
+  const sortOrder = opts.sortOrder ?? 'descending';
+  const maxResults = opts.maxResults ?? 10;
+
+  return `${ARXIV_API_URL}?search_query=${encoded}&max_results=${maxResults}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
+}
+
+async function fetchAtom(url: string): Promise<ArxivPaper[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(`${ARXIV_API_URL}?${params}`, {
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      throw new Error(`arXiv API error ${res.status}`);
-    }
-
-    const xml = await res.text();
-    return parseAtomFeed(xml);
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`arXiv API error ${res.status}`);
+    return parseAtomFeed(await res.text());
   } finally {
     clearTimeout(timer);
   }
 }
 
+export async function arxivSearch(
+  query: string,
+  opts: ArxivSearchOptions = {}
+): Promise<ArxivPaper[]> {
+  return fetchAtom(buildArxivUrl(query, opts));
+}
+
 export async function arxivGetPaper(paperId: string): Promise<ArxivPaper | null> {
-  // Normalize: strip version suffix for lookup, keep clean ID
   const cleanId = paperId.replace(/v\d+$/, '');
-  const params = new URLSearchParams({ id_list: cleanId, max_results: '1' });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-  try {
-    const res = await fetch(`${ARXIV_API_URL}?${params}`, {
-      signal: controller.signal,
-    });
-
-    if (!res.ok) throw new Error(`arXiv API error ${res.status}`);
-
-    const xml = await res.text();
-    const papers = parseAtomFeed(xml);
-    return papers[0] ?? null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const url = `${ARXIV_API_URL}?id_list=${cleanId}&max_results=1`;
+  const papers = await fetchAtom(url);
+  return papers[0] ?? null;
 }

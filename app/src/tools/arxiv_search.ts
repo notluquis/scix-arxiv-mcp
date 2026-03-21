@@ -13,19 +13,29 @@ export const arxivSearchSchema = {
     .default('relevance')
     .describe('Sort criterion'),
   sort_order: z.enum(['descending', 'ascending']).default('descending').describe('Sort direction'),
+  date_from: z.string().regex(/^\d{4}-\d{2}$|^\d{4}-\d{2}-\d{2}$/).optional().describe(
+    'Filter papers submitted on or after this date. Format: YYYY-MM or YYYY-MM-DD'
+  ),
+  date_to: z.string().regex(/^\d{4}-\d{2}$|^\d{4}-\d{2}-\d{2}$/).optional().describe(
+    'Filter papers submitted on or before this date. Format: YYYY-MM or YYYY-MM-DD'
+  ),
+  categories: z.array(z.string()).optional().describe(
+    'Filter by arXiv categories, e.g. ["cs.LG", "cs.CL", "stat.ML"]. ' +
+    'Papers matching ANY of the listed categories are included.'
+  ),
 };
 
 export type ArxivSearchInput = z.infer<z.ZodObject<typeof arxivSearchSchema>>;
 
-export async function handleArxivSearch(
-  input: ArxivSearchInput
-): Promise<string> {
-  const papers = await arxivSearch(
-    input.query,
-    input.max_results,
-    input.sort_by,
-    input.sort_order
-  );
+export async function handleArxivSearch(input: ArxivSearchInput): Promise<string> {
+  const papers = await arxivSearch(input.query, {
+    maxResults: input.max_results,
+    sortBy: input.sort_by,
+    sortOrder: input.sort_order,
+    dateFrom: input.date_from,
+    dateTo: input.date_to,
+    categories: input.categories,
+  });
 
   if (papers.length === 0) {
     return `No results found for: ${input.query}`;

@@ -9,7 +9,7 @@ describe('arxivSearch', () => {
   it('returns parsed papers from Atom feed', async () => {
     mockFetch({ text: makeAtomFeed([PAPER_1, PAPER_2]) });
 
-    const results = await arxivSearch('transformer attention', 2);
+    const results = await arxivSearch('transformer attention', { maxResults: 2 });
 
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe('2103.01231');
@@ -23,7 +23,7 @@ describe('arxivSearch', () => {
   it('parses DOI when present', async () => {
     mockFetch({ text: makeAtomFeed([PAPER_2]) });
 
-    const results = await arxivSearch('ViT', 1);
+    const results = await arxivSearch('ViT', { maxResults: 1 });
 
     expect(results[0].doi).toBe('10.1000/test.doi');
   });
@@ -39,7 +39,7 @@ describe('arxivSearch', () => {
   it('includes correct query params', async () => {
     const mock = mockFetch({ text: makeAtomFeed([]) });
 
-    await arxivSearch('ti:transformers', 5, 'submittedDate', 'ascending');
+    await arxivSearch('ti:transformers', { maxResults: 5, sortBy: 'submittedDate', sortOrder: 'ascending' });
 
     const [url] = mock.mock.calls[0];
     expect(url).toContain('search_query=ti%3Atransformers');

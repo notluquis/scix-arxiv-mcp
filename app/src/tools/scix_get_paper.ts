@@ -4,7 +4,7 @@ import { DEFAULT_FIELDS } from '../config.js';
 import { formatScixPaper } from '../formatters.js';
 
 export const scixGetPaperSchema = {
-  bibcode: z.string().min(1).max(30).describe(
+  bibcode: z.string().min(1).max(19).describe(
     'SciX/ADS bibcode identifier. Example: "2019ApJ...882L..24A". ' +
     'Also accepts arXiv IDs like "arXiv:2103.01231" or DOIs.'
   ),

@@ -4,7 +4,7 @@ import { DEFAULT_FIELDS } from '../config.js';
 import { formatScixList } from '../formatters.js';
 
 export const scixGetCitationsSchema = {
-  bibcode: z.string().min(1).max(30).describe('SciX/ADS bibcode of the paper'),
+  bibcode: z.string().min(1).max(19).describe('SciX/ADS bibcode of the paper'),
   rows: z.number().int().min(1).max(50).default(20).describe('Number of citations to return'),
   relationship: z.enum(['citations', 'references']).default('citations').describe(
     '"citations" = papers that cite this paper; "references" = papers cited by this paper'
