@@ -1,0 +1,58 @@
+{
+  "name": "scix-mcp",
+  "version": "1.0.14",
+  "description": "MCP server for NASA Astrophysics Data System API",
+  "type": "module",
+  "bin": {
+    "scix-mcp": "./build/index.js"
+  },
+  "files": [
+    "build",
+    "data/scix/chunked-index.json",
+    "README.md",
+    "LICENSE",
+    "USAGE_GUIDE.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "nasa",
+    "ads",
+    "astrophysics",
+    "astronomy",
+    "research",
+    "papers"
+  ],
+  "author": "Tim Hostetler",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thostetler/scix-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thostetler/scix-mcp/issues"
+  },
+  "homepage": "https://github.com/thostetler/scix-mcp#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "minisearch": "^7.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
