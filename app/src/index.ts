@@ -1,5 +1,7 @@
-import express from 'express';
-import type { Request, Response, NextFunction } from 'express';
+import { serve } from '@hono/node-server';
+import type { HttpBindings } from '@hono/node-server';
+import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
+import { Hono } from 'hono';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
@@ -13,13 +15,10 @@ import { arxivSearchSchema, handleArxivSearch } from './tools/arxiv_search.js';
 import { arxivGetPaperSchema, handleArxivGetPaper } from './tools/arxiv_get_paper.js';
 
 // ── MCP server factory ───────────────────────────────────────────────────────
-// Stateless: one McpServer instance per request.
 
 function createMcpServer(): McpServer {
   const server = new McpServer({ name: 'research-remote-mcp', version: '1.0.0' });
   const scix = new ScixClient();
-
-  // ── SciX tools ─────────────────────────────────────────────────────────
 
   server.tool(
     'scix_search',
@@ -60,8 +59,6 @@ function createMcpServer(): McpServer {
     })
   );
 
-  // ── arXiv tools ────────────────────────────────────────────────────────
-
   server.tool(
     'arxiv_search',
     'Search arXiv preprint server for papers across all scientific disciplines. ' +
@@ -86,48 +83,44 @@ function createMcpServer(): McpServer {
   return server;
 }
 
-// ── Express app ──────────────────────────────────────────────────────────────
+// ── Hono app ─────────────────────────────────────────────────────────────────
 
-const app = express();
-app.use(express.json());
+const app = new Hono<{ Bindings: HttpBindings }>();
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', server: 'research-remote-mcp' });
-});
+app.get('/health', (c) => c.json({ status: 'ok', server: 'research-remote-mcp' }));
 
-// Express v5: async errors auto-propagate — no try/catch needed.
-app.post('/mcp', async (req, res) => {
+// MCP endpoint — stateless, one server+transport per request.
+// We write directly to the raw Node.js ServerResponse (SSE / chunked transfer),
+// so we return RESPONSE_ALREADY_SENT to prevent Hono from double-writing.
+app.post('/mcp', async (c) => {
+  const { incoming, outgoing } = c.env;
+  const body = await c.req.json().catch(() => undefined);
+
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   const server = createMcpServer();
 
-  res.on('close', () => {
+  outgoing.on('close', () => {
     transport.close();
     server.close();
   });
 
   await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  await transport.handleRequest(incoming, outgoing, body);
+
+  return RESPONSE_ALREADY_SENT;
 });
 
-app.get('/mcp', (_req, res) => {
-  res.status(405).json({
-    error: 'Method Not Allowed',
-    detail: 'Stateless Streamable HTTP — send POST to /mcp.',
-  });
-});
+app.get('/mcp', (c) =>
+  c.json(
+    { error: 'Method Not Allowed', detail: 'Stateless Streamable HTTP — send POST to /mcp.' },
+    405
+  )
+);
 
-app.delete('/mcp', (_req, res) => {
-  res.status(405).json({ error: 'Method Not Allowed', detail: 'Stateless server has no sessions.' });
-});
+app.delete('/mcp', (c) =>
+  c.json({ error: 'Method Not Allowed', detail: 'Stateless server has no sessions.' }, 405)
+);
 
-// Express v5 error handler (4-arg signature required)
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('MCP error:', err);
-  if (!res.headersSent) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.listen(PORT, () => {
+serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`research-remote-mcp on :${PORT}  →  POST /mcp`);
 });
