@@ -42,6 +42,9 @@ export async function handleScixGetMetrics(
     if (cit['average number of citations'] != null) {
       result += `- **Average:** ${Number(cit['average number of citations']).toFixed(1)}\n`;
     }
+    if (cit['median number of citations'] != null) {
+      result += `- **Median:** ${cit['median number of citations']}\n`;
+    }
     result += `- **Self-citations:** ${cit['number of self-citations'] ?? 0}\n\n`;
   }
 
@@ -49,6 +52,9 @@ export async function handleScixGetMetrics(
     result += `## Paper Statistics\n\n`;
     result += `- **Total papers:** ${basic['number of papers'] ?? 0}\n`;
     result += `- **Total reads:** ${basic['total number of reads'] ?? 0}\n`;
+    if (basic['average number of reads'] != null) {
+      result += `- **Average reads:** ${Number(basic['average number of reads']).toFixed(1)}\n`;
+    }
     result += '\n';
   }
 

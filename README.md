@@ -10,41 +10,73 @@ The original MCP servers for SciX and arXiv are excellent — but they run local
 claude.ai
   └── Custom Connector
         └── https://your-domain.com/mcp
-              ├── SciX / NASA ADS   (peer-reviewed astronomy & astrophysics)
+              ├── SciX / NASA ADS   (peer-reviewed astronomy, astrophysics, planetary science)
               └── arXiv             (preprints across all sciences)
 ```
 
 ## Tools
 
-| Tool | Source | Description |
-|------|--------|-------------|
-| `scix_search` | SciX / ADS | Full-text + metadata search with Solr syntax |
-| `scix_get_paper` | SciX / ADS | Full metadata + abstract by bibcode, arXiv ID, or DOI |
-| `scix_get_citations` | SciX / ADS | Papers that cite or are cited by a given paper |
-| `scix_get_metrics` | SciX / ADS | h-index, g-index, i10-index, citation counts |
-| `arxiv_search` | arXiv | Search preprints with field prefixes (ti:, au:, abs:, cat:) |
-| `arxiv_get_paper` | arXiv | Full metadata + abstract by arXiv ID |
+### SciX / NASA ADS
+
+| Tool | Description |
+|------|-------------|
+| `scix_search` | Full-text + metadata search with Solr syntax; returns bibcodes, titles, authors, citation counts |
+| `scix_get_paper` | Full metadata + abstract by bibcode, arXiv ID, or DOI |
+| `scix_get_citations` | Papers that cite or are cited by a given paper |
+| `scix_get_metrics` | h-index, g-index, i10-index, m-index, tori, total/refereed citations, reads |
+| `scix_export` | Export bibliography in BibTeX, RIS, AASTeX, IEEE, MNRAS, and 18+ other formats |
+| `scix_find_similar` | Find papers with similar content to a given bibcode using SciX's `similar()` operator |
+| `scix_library_list` | List your personal SciX libraries (saved paper collections) |
+| `scix_library_get` | Get contents and metadata of a specific library |
+| `scix_library_create` | Create a new personal library |
+| `scix_library_documents` | Add or remove papers from a library |
+| `scix_library_note` | Get, set, or delete personal annotation notes on papers in a library |
+
+### arXiv
+
+| Tool | Description |
+|------|-------------|
+| `arxiv_search` | Search preprints with field prefixes (`ti:`, `au:`, `abs:`, `cat:`), date ranges, and category filters |
+| `arxiv_get_paper` | Full metadata + abstract by arXiv ID; returns links to PDF and HTML versions |
+
+### Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `research_discovery` | Explore a topic: find influential papers, key authors, open questions |
+| `deep_paper_analysis` | Deep analysis of a specific paper: methodology, results, limitations, context |
+| `literature_synthesis` | Synthesize findings across multiple papers into a state-of-the-art review |
 
 ## Architecture
 
 ```
-app/
-├── src/
-│   ├── index.ts          # Express v5 + StreamableHTTPServerTransport (stateless)
-│   ├── config.ts         # env vars
-│   ├── formatters.ts     # markdown output
-│   ├── clients/
-│   │   ├── scix.ts       # HTTP client for ADS API
-│   │   └── arxiv.ts      # HTTP client + Atom XML parser for arXiv
-│   └── tools/            # one file per tool (schema + handler)
-├── Dockerfile            # multi-stage node:22-alpine
-└── railway.json
+src/
+├── index.ts          # Hono + StreamableHTTPServerTransport (stateless)
+├── config.ts         # env vars
+├── formatters.ts     # shared markdown output helpers
+├── clients/
+│   ├── scix.ts       # HTTP client for ADS API (singleton)
+│   └── arxiv.ts      # HTTP client + Atom XML parser for arXiv
+└── tools/            # one file per tool (schema + handler)
 
-arxiv-mcp-server/         # reference source (Python, local/stdio)
-scix-mcp/                 # reference source (TypeScript, local/stdio)
+test/                 # vitest tests (79 tests)
+vendor/               # reference source (not deployed)
+  ├── arxiv-mcp-server/   # original Python server by Joseph Blazick
+  └── scix-mcp/           # original TypeScript server by Tim Hostetler
+
+Dockerfile            # multi-stage node:22-alpine
+railway.json          # Railway deployment config
 ```
 
-The server is **stateless** — a new MCP server instance is created per request. No sessions, no in-memory state. This keeps deployment simple and makes it trivially horizontally scalable.
+The server is **stateless** — a new MCP server instance is created per request. No sessions, no in-memory state. This keeps deployment simple and makes horizontal scaling trivial.
+
+## Why Hono
+
+Hono replaced Express v5 as the HTTP layer because:
+
+- **Native `HttpBindings`** — Hono's `@hono/node-server` exposes the raw Node.js `IncomingMessage` and `ServerResponse` objects that MCP's `StreamableHTTPServerTransport` needs directly, with no adapter layer
+- **`RESPONSE_ALREADY_SENT` sentinel** — cleanly tells Hono not to write its own response after the MCP transport hijacks the socket for SSE streaming
+- **Zero overhead** — Hono adds no middleware stack, just routes; appropriate for a tight service with two endpoints
 
 ## Setup
 
@@ -54,11 +86,6 @@ Create an account at [scixplorer.org](https://scixplorer.org) and generate a tok
 
 ### 2. Environment variables
 
-```bash
-cp app/.env.example app/.env
-# Set SCIX_API_TOKEN in .env
-```
-
 ```env
 SCIX_API_TOKEN=your_token_here   # required
 PORT=3000                         # optional, default 3000
@@ -67,13 +94,13 @@ PORT=3000                         # optional, default 3000
 ### 3. Run locally
 
 ```bash
-pnpm install
-pnpm -F research-remote-mcp dev
+npm install
+npm run dev
 ```
 
 ### 4. Deploy to Railway
 
-Connect the repo in Railway, set `app/` as the root directory (or configure via `railway.json`), and add the `SCIX_API_TOKEN` environment variable. Railway will build the Docker image and publish a domain.
+Connect the repo in Railway and add the `SCIX_API_TOKEN` environment variable. Railway picks up `railway.json` and builds from the root-level `Dockerfile` automatically.
 
 ### 5. Add to Claude
 
@@ -86,29 +113,20 @@ https://your-domain.railway.app/mcp
 ## Development
 
 ```bash
-# install all workspace packages
-pnpm install
-
-# build
-pnpm -F research-remote-mcp build
-
-# test (58 tests)
-pnpm -F research-remote-mcp test
-
-# test with coverage
-pnpm -F research-remote-mcp test:coverage
-
-# dev server (watch mode)
-pnpm -F research-remote-mcp dev
+npm install          # install deps
+npm run build        # TypeScript → build/
+npm test             # run 79 tests
+npm run test:watch   # watch mode
+npm run dev          # watch + run (tsx)
 ```
 
 ## Tech stack
 
-- **MCP SDK** `@modelcontextprotocol/sdk` — Streamable HTTP transport
-- **Express v5** — HTTP server (async errors propagate automatically)
+- **Hono** + `@hono/node-server` — HTTP server with native Node.js bindings
+- **MCP SDK** `@modelcontextprotocol/sdk` — Streamable HTTP transport (stateless)
 - **Zod v4** — schema validation and type inference
 - **TypeScript 5.9** / Node.js 22
-- **vitest** — tests
+- **vitest** — 79 tests across all tools and clients
 
 ## Credits
 
@@ -120,7 +138,7 @@ This project is built on top of the work of:
 **[arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server)** by [Joseph Blazick](https://github.com/blazickjp)
 — Python MCP server for arXiv search and paper access. The arXiv tool design, query patterns, and category handling in this project are based on his implementation.
 
-Both original projects are MIT-licensed and included here as reference source under `arxiv-mcp-server/` and `scix-mcp/`.
+Both original projects are MIT-licensed and included under `vendor/` as reference source.
 
 ## License
 

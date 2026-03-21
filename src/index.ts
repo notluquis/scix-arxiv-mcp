@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 
 import { PORT } from './config.js';
-import { ScixClient } from './clients/scix.js';
+import { getScixClient } from './clients/scix.js';
 
 // SciX tools
 import { scixSearchSchema, handleScixSearch } from './tools/scix_search.js';
@@ -15,12 +15,14 @@ import { scixGetPaperSchema, handleScixGetPaper } from './tools/scix_get_paper.j
 import { scixGetCitationsSchema, handleScixGetCitations } from './tools/scix_get_citations.js';
 import { scixGetMetricsSchema, handleScixGetMetrics } from './tools/scix_get_metrics.js';
 import { scixExportSchema, handleScixExport } from './tools/scix_export.js';
+import { scixFindSimilarSchema, handleScixFindSimilar } from './tools/scix_find_similar.js';
 import {
   scixLibraryListSchema, handleScixLibraryList,
   scixLibraryGetSchema, handleScixLibraryGet,
   scixLibraryCreateSchema, handleScixLibraryCreate,
   scixLibraryDocumentsSchema, handleScixLibraryDocuments,
 } from './tools/scix_library.js';
+import { scixLibraryNoteSchema, handleScixLibraryNote } from './tools/scix_library_note.js';
 
 // arXiv tools
 import { arxivSearchSchema, handleArxivSearch } from './tools/arxiv_search.js';
@@ -30,7 +32,7 @@ import { arxivGetPaperSchema, handleArxivGetPaper } from './tools/arxiv_get_pape
 
 function createMcpServer(): McpServer {
   const server = new McpServer({ name: 'research-remote-mcp', version: '1.0.0' });
-  const scix = new ScixClient();
+  const scix = getScixClient();
 
   // ── SciX search & retrieval ────────────────────────────────────────────
 
@@ -121,6 +123,25 @@ function createMcpServer(): McpServer {
     scixLibraryDocumentsSchema,
     async (input) => ({
       content: [{ type: 'text', text: await handleScixLibraryDocuments(scix, input) }],
+    })
+  );
+
+  server.tool(
+    'scix_find_similar',
+    'Find papers with similar content to a given SciX/ADS paper using its bibcode. ' +
+    'Uses the SciX similar() operator to surface related work.',
+    scixFindSimilarSchema,
+    async (input) => ({
+      content: [{ type: 'text', text: await handleScixFindSimilar(scix, input) }],
+    })
+  );
+
+  server.tool(
+    'scix_library_note',
+    'Get, set, or delete a personal annotation note for a paper in a SciX library.',
+    scixLibraryNoteSchema,
+    async (input) => ({
+      content: [{ type: 'text', text: await handleScixLibraryNote(scix, input) }],
     })
   );
 
