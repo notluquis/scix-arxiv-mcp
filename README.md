@@ -98,10 +98,10 @@ Create an account at [scixplorer.org](https://scixplorer.org) and generate a tok
 SCIX_API_TOKEN=your_token_here   # required
 PORT=3000                         # optional, default 3000
 MCP_BEARER_TOKEN=secret           # optional, require Authorization: Bearer secret for /mcp
-MCP_ALLOWED_ORIGINS=https://app.example.com,https://claude.ai  # optional extra Origin allowlist
+MCP_ALLOWED_ORIGINS=https://app.example.com,https://claude.ai  # optional exact Origin allowlist
 ```
 
-If `MCP_ALLOWED_ORIGINS` is unset, requests without an `Origin` header are allowed and requests with an `Origin` header must match the request host. Set explicit origins in production when the server is behind a known client/proxy.
+Requests without an `Origin` header are allowed for server-to-server MCP clients. Requests with an `Origin` header must match `MCP_ALLOWED_ORIGINS`; when the allowlist is unset, only localhost origins are accepted for local development. Set explicit origins in production when using browser-based clients.
 
 ### 3. Run locally
 

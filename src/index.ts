@@ -3,10 +3,10 @@ import type { HttpBindings } from '@hono/node-server';
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 import { MCP_ALLOWED_ORIGINS, MCP_BEARER_TOKEN, PORT } from './config.js';
 import { getScixClient } from './clients/scix.js';
@@ -34,9 +34,60 @@ import { arxivReadPaperSchema, handleArxivReadPaper } from './tools/arxiv_read_p
 import { arxivDownloadPaperSchema, handleArxivDownloadPaper } from './tools/arxiv_download_paper.js';
 import { arxivCitationGraphSchema, getArxivCitationGraph } from './tools/arxiv_citation_graph.js';
 
-function textToolResult(text: string): CallToolResult {
-  return { content: [{ type: 'text', text }] };
+const textToolOutputSchema = z.object({
+  status: z.enum(['success', 'error']),
+  text: z.string(),
+});
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
+
+async function textToolResult(handler: () => Promise<string>): Promise<CallToolResult> {
+  try {
+    const text = await handler();
+    return {
+      content: [{ type: 'text', text }],
+      structuredContent: { status: 'success', text },
+      isError: false,
+    };
+  } catch (error) {
+    const text = `Error: ${errorMessage(error)}`;
+    return {
+      content: [{ type: 'text', text }],
+      structuredContent: { status: 'error', text },
+      isError: true,
+    };
+  }
+}
+
+function registerTextTool<Args extends z.ZodRawShape>(
+  server: McpServer,
+  name: string,
+  description: string,
+  inputSchema: Args,
+  annotations: ToolAnnotations,
+  handler: (input: z.infer<z.ZodObject<Args>>) => Promise<string>
+) {
+  const callback = (async (input: z.infer<z.ZodObject<Args>>) =>
+    textToolResult(() => handler(input))) as unknown as ToolCallback<Args>;
+
+  server.registerTool<typeof textToolOutputSchema, Args>(
+    name,
+    {
+      description,
+      inputSchema,
+      outputSchema: textToolOutputSchema,
+      annotations,
+    },
+    callback
+  );
+}
+
+const READ_EXTERNAL: ToolAnnotations = { readOnlyHint: true, openWorldHint: true };
+const READ_LOCAL: ToolAnnotations = { readOnlyHint: true, openWorldHint: false };
+const CREATE_REMOTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+const MUTATE_REMOTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 
 // ── MCP server factory ───────────────────────────────────────────────────────
 
@@ -46,130 +97,162 @@ function createMcpServer(): McpServer {
 
   // ── SciX search & retrieval ────────────────────────────────────────────
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_search',
     'Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. ' +
     'Covers astronomy, astrophysics, physics, planetary science, and related fields. ' +
     'Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details.',
     scixSearchSchema,
-    async (input) => textToolResult(await handleScixSearch(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixSearch(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_get_paper',
     'Get full metadata and abstract for a paper in SciX/ADS by its bibcode, arXiv ID, or DOI.',
     scixGetPaperSchema,
-    async (input) => textToolResult(await handleScixGetPaper(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixGetPaper(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_get_citations',
     'Get papers that cite a given SciX/ADS paper (citations), or papers it cites (references).',
     scixGetCitationsSchema,
-    async (input) => textToolResult(await handleScixGetCitations(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixGetCitations(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_get_metrics',
     'Compute citation metrics (h-index, g-index, i10-index, citation counts) for a set of papers.',
     scixGetMetricsSchema,
-    async (input) => textToolResult(await handleScixGetMetrics(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixGetMetrics(scix, input)
   );
 
   // ── SciX export ────────────────────────────────────────────────────────
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_export',
     'Export a list of papers in a bibliography format. ' +
     'Supports BibTeX, RIS (Zotero/Mendeley), EndNote, AASTeX, IEEE, MNRAS, and 18 other formats. ' +
     'Pass bibcodes from scix_search results. Ideal for building reference lists.',
     scixExportSchema,
-    async (input) => textToolResult(await handleScixExport(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixExport(scix, input)
   );
 
   // ── SciX libraries ─────────────────────────────────────────────────────
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_library_list',
     'List your SciX personal libraries (saved paper collections). ' +
     'Returns library IDs, names, paper counts, and permissions.',
     scixLibraryListSchema,
-    async (input) => textToolResult(await handleScixLibraryList(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixLibraryList(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_library_get',
     'Get the contents and metadata of a specific SciX library by its ID.',
     scixLibraryGetSchema,
-    async (input) => textToolResult(await handleScixLibraryGet(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixLibraryGet(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_library_create',
     'Create a new personal library in SciX to save and organize papers.',
     scixLibraryCreateSchema,
-    async (input) => textToolResult(await handleScixLibraryCreate(scix, input))
+    CREATE_REMOTE,
+    async (input) => handleScixLibraryCreate(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_library_documents',
     'Add or remove papers from a SciX library. Pass bibcodes and "add" or "remove".',
     scixLibraryDocumentsSchema,
-    async (input) => textToolResult(await handleScixLibraryDocuments(scix, input))
+    MUTATE_REMOTE,
+    async (input) => handleScixLibraryDocuments(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_find_similar',
     'Find papers with similar content to a given SciX/ADS paper using its bibcode. ' +
     'Uses the SciX similar() operator to surface related work.',
     scixFindSimilarSchema,
-    async (input) => textToolResult(await handleScixFindSimilar(scix, input))
+    READ_EXTERNAL,
+    async (input) => handleScixFindSimilar(scix, input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_search_docs',
     'Search SciX help docs, search syntax guides, and usage notes.',
     scixSearchDocsSchema,
-    async (input) => textToolResult(await handleScixSearchDocs(input))
+    READ_LOCAL,
+    async (input) => handleScixSearchDocs(input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'scix_library_note',
     'Get, set, or delete a personal annotation note for a paper in a SciX library.',
     scixLibraryNoteSchema,
-    async (input) => textToolResult(await handleScixLibraryNote(scix, input))
+    MUTATE_REMOTE,
+    async (input) => handleScixLibraryNote(scix, input)
   );
 
   // ── arXiv ──────────────────────────────────────────────────────────────
 
-  server.tool(
+  registerTextTool(
+    server,
     'arxiv_search',
     'Search arXiv preprint server across all scientific disciplines. ' +
     'Supports field prefixes (ti:, au:, abs:, cat:), date ranges, and category filters.',
     arxivSearchSchema,
-    async (input) => textToolResult(await handleArxivSearch(input))
+    READ_EXTERNAL,
+    async (input) => handleArxivSearch(input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'arxiv_get_paper',
     'Get full metadata and abstract for a specific arXiv paper by its ID (e.g. "2103.01231"). ' +
     'Returns title, authors, abstract, categories, and links to PDF and HTML versions.',
     arxivGetPaperSchema,
-    async (input) => textToolResult(await handleArxivGetPaper(input))
+    READ_EXTERNAL,
+    async (input) => handleArxivGetPaper(input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'arxiv_read_paper',
     'Fetch a paper from arXiv and extract its full text from the HTML rendering or source archive as markdown-ready text.',
     arxivReadPaperSchema,
-    async (input) => textToolResult(await handleArxivReadPaper(input))
+    READ_EXTERNAL,
+    async (input) => handleArxivReadPaper(input)
   );
 
-  server.tool(
+  registerTextTool(
+    server,
     'arxiv_download_paper',
     'Download a paper from arXiv and extract full text from the PDF. Directly fetches and processes the PDF file.',
     arxivDownloadPaperSchema,
-    async (input) => textToolResult(await handleArxivDownloadPaper(input))
+    READ_EXTERNAL,
+    async (input) => handleArxivDownloadPaper(input)
   );
 
   server.registerTool(
@@ -510,29 +593,20 @@ const app = new Hono<AppEnv>();
 
 app.get('/health', (c) => c.json({ status: 'ok', server: 'research-remote-mcp' }));
 
-function getExpectedOrigins(c: AppContext): string[] {
-  const host = c.req.header('host');
-  if (!host) return [];
-
-  const proto = c.req.header('x-forwarded-proto') ?? 'https';
-  return Array.from(new Set([
-    `${proto.split(',')[0]}://${host}`,
-    `https://${host}`,
-    `http://${host}`,
-  ]));
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
 }
 
 function isAllowedOrigin(c: AppContext): boolean {
   const origin = c.req.header('origin');
   if (!origin) return true;
-  if (MCP_ALLOWED_ORIGINS.includes('*')) return true;
-
-  const allowedOrigins = new Set([
-    ...MCP_ALLOWED_ORIGINS,
-    ...getExpectedOrigins(c),
-  ]);
-
-  return allowedOrigins.has(origin);
+  if (MCP_ALLOWED_ORIGINS.includes(origin)) return true;
+  return MCP_ALLOWED_ORIGINS.length === 0 && isLocalOrigin(origin);
 }
 
 function isAuthorized(c: AppContext): boolean {
@@ -546,6 +620,7 @@ async function handleMcpRequest(c: AppContext, body?: unknown) {
   }
 
   if (!isAuthorized(c)) {
+    c.header('WWW-Authenticate', 'Bearer realm="research-remote-mcp"');
     return c.json({ error: 'Unauthorized', detail: 'Missing or invalid bearer token.' }, 401);
   }
 
