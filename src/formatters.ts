@@ -1,4 +1,5 @@
-import type { ArxivPaper } from './clients/arxiv.js';
+import type { ArxivPaper, ArxivReadPaperResult } from './clients/arxiv.js';
+import type { SciXDocSearchResult } from './clients/scix_docs.js';
 
 // ── SciX formatters ──────────────────────────────────────────────────────────
 
@@ -88,6 +89,63 @@ export function formatArxivList(papers: ArxivPaper[]): string {
     result += `   - ID: \`${p.id}\`\n`;
     result += `   - Categories: ${p.categories.slice(0, 3).join(', ')}\n`;
     result += `   - [Abstract](${p.absUrl})\n\n`;
+  });
+
+  return result;
+}
+
+export function formatArxivReadPaper(result: ArxivReadPaperResult): string {
+  if (!result.paper) {
+    return 'No paper found.';
+  }
+
+  const paper = result.paper;
+  const authorStr = paper.authors.length > 3
+    ? `${paper.authors.slice(0, 3).join(', ')} et al.`
+    : paper.authors.join(', ');
+
+  let output = `# ${paper.title}\n\n`;
+  output += `**Authors:** ${authorStr || 'N/A'}\n\n`;
+  output += `**arXiv ID:** \`${paper.id}\`\n\n`;
+  output += `**Source:** ${result.source === 'tex' ? 'arXiv source archive' : result.source === 'html' ? 'arXiv HTML' : result.source === 'pdf' ? 'arXiv PDF' : 'Abstract fallback'}\n\n`;
+  if (result.sourceName) {
+    output += `**Source file:** \`${result.sourceName}\`\n\n`;
+  }
+  output += `**Links:** [Abstract](${paper.absUrl}) | [PDF](${paper.pdfUrl}) | [HTML](${paper.htmlUrl})\n\n`;
+  if (paper.doi) {
+    output += `**DOI:** https://doi.org/${paper.doi}\n\n`;
+  }
+  output += `## Extracted text\n\n${result.content.trim()}\n`;
+
+  return output.trim() + '\n';
+}
+
+export function formatArxivFullText(p: ArxivPaper, fullText: string): string {
+  const authorStr = p.authors.length > 3
+    ? `${p.authors.slice(0, 3).join(', ')} et al.`
+    : p.authors.join(', ');
+
+  const date = p.published.slice(0, 10);
+
+  let result = `# ${p.title}\n\n`;
+  result += `**Authors:** ${authorStr || 'N/A'}\n\n`;
+  result += `**arXiv ID:** \`${p.id}\`\n\n`;
+  result += `**Published:** ${date}\n\n`;
+  result += `**Links:** [Abstract](${p.absUrl}) | [PDF](${p.pdfUrl}) | [HTML](${p.htmlUrl})\n\n`;
+  result += `## Abstract\n\n${p.abstract}\n\n`;
+  result += `## Full text\n\n${fullText || '_No text could be extracted from the PDF._'}\n\n`;
+
+  return result;
+}
+
+export function formatScixDocsResults(results: SciXDocSearchResult[], query: string): string {
+  let result = `# SciX Documentation Search\n\nFound **${results.length}** result(s) for **${query}**\n\n`;
+
+  results.forEach((doc, idx) => {
+    result += `${idx + 1}. **${doc.title}**\n`;
+    result += `   - Section: ${doc.section || 'N/A'}${doc.subsection ? ` / ${doc.subsection}` : ''}\n`;
+    result += `   - Source: [${doc.source_file || 'docs'}](${doc.source_url})\n`;
+    result += `   - Snippet: ${doc.snippet}\n\n`;
   });
 
   return result;
