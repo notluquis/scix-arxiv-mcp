@@ -76,9 +76,9 @@ export async function handleScixLibraryGet(
   const data = await client.get(`biblib/libraries/${input.library_id}`) as {
     metadata?: LibraryMeta;
     documents?: string[];
-  };
+  } & Partial<LibraryMeta>;
 
-  const meta = data.metadata;
+  const meta: Partial<LibraryMeta> = data.metadata ?? data;
   const docs = data.documents ?? [];
 
   if (!meta?.name) return `Library ${input.library_id} not found or empty response.`;
@@ -109,14 +109,22 @@ export async function handleScixLibraryCreate(
   if (input.bibcodes?.length) body['bibcodes'] = input.bibcodes;
 
   const data = await client.post('biblib/libraries', body) as {
+    metadata?: {
+      name?: string;
+      id?: string;
+      bibcode?: string[];
+      num_documents?: number;
+    };
     name?: string;
     id?: string;
     bibcode?: string[];
+    num_documents?: number;
   };
 
-  const id = data.id ?? '(unknown)';
-  const name = data.name ?? input.name;
-  const added = Array.isArray(data.bibcode) ? data.bibcode.length : 0;
+  const library = data.metadata ?? data;
+  const id = library.id ?? '(unknown)';
+  const name = library.name ?? input.name;
+  const added = Array.isArray(library.bibcode) ? library.bibcode.length : library.num_documents ?? 0;
 
   let out = `# Library Created: ${name}\n\n`;
   out += `- **ID:** \`${id}\`\n`;

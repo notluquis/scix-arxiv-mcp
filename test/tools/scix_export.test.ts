@@ -58,6 +58,25 @@ describe('handleScixExport', () => {
     expect(body.maxauthor).toEqual([5]);
   });
 
+  it('includes upstream optional export parameters', async () => {
+    const mock = mockFetch({ body: { export: '' } });
+    const client = new ScixClient();
+
+    await handleScixExport(client, {
+      bibcodes: ['A'],
+      format: 'bibtex',
+      authorcutoff: 10,
+      journalformat: 3,
+      keyformat: '%R',
+    });
+
+    const [, init] = mock.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.authorcutoff).toEqual([10]);
+    expect(body.journalformat).toEqual([3]);
+    expect(body.keyformat).toEqual(['%R']);
+  });
+
   it('returns empty string when API returns no export field', async () => {
     mockFetch({ body: {} });
     const client = new ScixClient();

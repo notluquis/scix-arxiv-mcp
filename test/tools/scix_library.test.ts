@@ -95,6 +95,21 @@ describe('handleScixLibraryGet', () => {
 
     expect(result).toContain('not found');
   });
+
+  it('handles library metadata returned at the root level', async () => {
+    mockFetch({
+      body: {
+        ...MOCK_LIB,
+        documents: ['2024ApJ...1A'],
+      },
+    });
+    const client = new ScixClient();
+
+    const result = await handleScixLibraryGet(client, { library_id: 'abc123' });
+
+    expect(result).toContain('My Astronomy Papers');
+    expect(result).toContain('2024ApJ...1A');
+  });
 });
 
 describe('handleScixLibraryCreate', () => {
@@ -128,6 +143,29 @@ describe('handleScixLibraryCreate', () => {
     const body = JSON.parse(init?.body as string);
     expect(body.name).toBe('X');
     expect(body.public).toBe(true);
+  });
+
+  it('handles created library metadata returned under metadata', async () => {
+    mockFetch({
+      body: {
+        metadata: {
+          ...MOCK_LIB,
+          id: 'meta123',
+          name: 'Metadata Library',
+          num_documents: 4,
+        },
+      },
+    });
+    const client = new ScixClient();
+
+    const result = await handleScixLibraryCreate(client, {
+      name: 'Metadata Library',
+      public: false,
+    });
+
+    expect(result).toContain('Metadata Library');
+    expect(result).toContain('meta123');
+    expect(result).toContain('4');
   });
 });
 

@@ -26,8 +26,14 @@ export const scixExportSchema = {
   maxauthor: z.number().int().optional().describe(
     'Maximum number of authors to list before truncating to et al.'
   ),
+  authorcutoff: z.number().int().optional().describe(
+    'Author cutoff threshold before applying truncation'
+  ),
   journalformat: z.number().int().min(1).max(4).optional().describe(
     'Journal abbreviation style: 1=AASTeX, 2=Icarus, 3=MNRAS, 4=SOPH'
+  ),
+  keyformat: z.string().optional().describe(
+    'Citation key format template for export formats that support custom keys'
   ),
 };
 
@@ -41,7 +47,9 @@ export async function handleScixExport(
 
   if (input.sort) body['sort'] = [input.sort];
   if (input.maxauthor != null) body['maxauthor'] = [input.maxauthor];
+  if (input.authorcutoff != null) body['authorcutoff'] = [input.authorcutoff];
   if (input.journalformat != null) body['journalformat'] = [input.journalformat];
+  if (input.keyformat) body['keyformat'] = [input.keyformat];
   if (input.format === 'custom' && input.custom_format) body['format'] = input.custom_format;
 
   const data = await client.post(`export/${input.format}`, body) as { export?: string };
