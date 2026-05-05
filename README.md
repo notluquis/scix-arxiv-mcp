@@ -22,6 +22,7 @@ claude.ai
 |------|-------------|
 | `scix_search` | Full-text + metadata search with Solr syntax; returns bibcodes, titles, authors, citation counts |
 | `scix_get_paper` | Full metadata + abstract by bibcode, arXiv ID, or DOI |
+| `scix_search_docs` | Search SciX help docs, search syntax, and usage guides |
 | `scix_get_citations` | Papers that cite or are cited by a given paper |
 | `scix_get_metrics` | h-index, g-index, i10-index, m-index, tori, total/refereed citations, reads |
 | `scix_export` | Export bibliography in BibTeX, RIS, AASTeX, IEEE, MNRAS, and 18+ other formats |
@@ -38,6 +39,8 @@ claude.ai
 |------|-------------|
 | `arxiv_search` | Search preprints with field prefixes (`ti:`, `au:`, `abs:`, `cat:`), date ranges, and category filters |
 | `arxiv_get_paper` | Full metadata + abstract by arXiv ID; returns links to PDF and HTML versions |
+| `arxiv_read_paper` | Extract full text from arXiv HTML or source archive and return markdown-ready paper text |
+| `arxiv_download_paper` | Download a paper from arXiv and extract full text directly from the PDF |
 
 ### Prompts
 
@@ -56,10 +59,11 @@ src/
 ├── formatters.ts     # shared markdown output helpers
 ├── clients/
 │   ├── scix.ts       # HTTP client for ADS API (singleton)
-│   └── arxiv.ts      # HTTP client + Atom XML parser for arXiv
+│   ├── arxiv.ts      # HTTP client + Atom XML parser + full-text extraction helpers for arXiv
+│   └── scix_docs.ts  # SciX documentation search index
 └── tools/            # one file per tool (schema + handler)
 
-test/                 # vitest tests (79 tests)
+test/                 # vitest tests
 vendor/               # reference source (not deployed)
   ├── arxiv-mcp-server/   # original Python server by Joseph Blazick
   └── scix-mcp/           # original TypeScript server by Tim Hostetler
@@ -115,7 +119,7 @@ https://your-domain.railway.app/mcp
 ```bash
 pnpm install          # install deps
 pnpm build            # TypeScript → build/
-pnpm test             # run 79 tests
+pnpm test             # run the test suite
 pnpm test:watch       # watch mode
 pnpm dev              # watch + run (tsx)
 ```
@@ -126,7 +130,7 @@ pnpm dev              # watch + run (tsx)
 - **MCP SDK** `@modelcontextprotocol/sdk` — Streamable HTTP transport (stateless)
 - **Zod v4** — schema validation and type inference
 - **TypeScript 5.9** / Node.js 22
-- **vitest** — 79 tests across all tools and clients
+- **vitest** — test suite across all tools and clients
 
 ## Credits
 
