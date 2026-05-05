@@ -16,6 +16,7 @@ import { scixGetCitationsSchema, handleScixGetCitations } from './tools/scix_get
 import { scixGetMetricsSchema, handleScixGetMetrics } from './tools/scix_get_metrics.js';
 import { scixExportSchema, handleScixExport } from './tools/scix_export.js';
 import { scixFindSimilarSchema, handleScixFindSimilar } from './tools/scix_find_similar.js';
+import { scixSearchDocsSchema, handleScixSearchDocs } from './tools/scix_search_docs.js';
 import {
   scixLibraryListSchema, handleScixLibraryList,
   scixLibraryGetSchema, handleScixLibraryGet,
@@ -27,6 +28,8 @@ import { scixLibraryNoteSchema, handleScixLibraryNote } from './tools/scix_libra
 // arXiv tools
 import { arxivSearchSchema, handleArxivSearch } from './tools/arxiv_search.js';
 import { arxivGetPaperSchema, handleArxivGetPaper } from './tools/arxiv_get_paper.js';
+import { arxivReadPaperSchema, handleArxivReadPaper } from './tools/arxiv_read_paper.js';
+import { arxivDownloadPaperSchema, handleArxivDownloadPaper } from './tools/arxiv_download_paper.js';
 
 // ── MCP server factory ───────────────────────────────────────────────────────
 
@@ -137,6 +140,15 @@ function createMcpServer(): McpServer {
   );
 
   server.tool(
+    'scix_search_docs',
+    'Search SciX help docs, search syntax guides, and usage notes.',
+    scixSearchDocsSchema,
+    async (input) => ({
+      content: [{ type: 'text', text: await handleScixSearchDocs(input) }],
+    })
+  );
+
+  server.tool(
     'scix_library_note',
     'Get, set, or delete a personal annotation note for a paper in a SciX library.',
     scixLibraryNoteSchema,
@@ -164,6 +176,24 @@ function createMcpServer(): McpServer {
     arxivGetPaperSchema,
     async (input) => ({
       content: [{ type: 'text', text: await handleArxivGetPaper(input) }],
+    })
+  );
+
+  server.tool(
+    'arxiv_read_paper',
+    'Fetch a paper from arXiv and extract its full text from the HTML rendering or source archive as markdown-ready text.',
+    arxivReadPaperSchema,
+    async (input) => ({
+      content: [{ type: 'text', text: await handleArxivReadPaper(input) }],
+    })
+  );
+
+  server.tool(
+    'arxiv_download_paper',
+    'Download a paper from arXiv and extract full text from the PDF. Directly fetches and processes the PDF file.',
+    arxivDownloadPaperSchema,
+    async (input) => ({
+      content: [{ type: 'text', text: await handleArxivDownloadPaper(input) }],
     })
   );
 
@@ -224,9 +254,10 @@ function createMcpServer(): McpServer {
             '',
             'Steps:',
             '1. Retrieve the paper with arxiv_get_paper',
-            '2. Also check SciX for citation metrics with scix_get_paper (if indexed)',
-            '3. Analyze the paper with focus on: ' + focus,
-            '4. Structure your analysis as:',
+            '2. If you need the full paper text, use arxiv_read_paper (prefers HTML/TeX) or arxiv_download_paper (PDF extraction)',
+            '3. Also check SciX for citation metrics with scix_get_paper (if indexed)',
+            '4. Analyze the paper with focus on: ' + focus,
+            '5. Structure your analysis as:',
             '   - Executive summary (3-5 sentences)',
             '   - Key contributions',
             '   - Methodology / approach',
