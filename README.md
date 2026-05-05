@@ -119,6 +119,8 @@ npm run dev
 
 Connect the repo in Railway and add the `SCIX_API_TOKEN` environment variable. Railway picks up `railway.json` and builds from the root-level `Dockerfile` automatically.
 
+After deploy, check `/health`; it returns the server version and deployment commit when Railway exposes `RAILWAY_GIT_COMMIT_SHA`.
+
 ### 5. Add to Claude
 
 In Claude → Settings → Connectors → Add custom connector:

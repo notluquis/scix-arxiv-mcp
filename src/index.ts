@@ -15,7 +15,9 @@ import {
   MCP_AUTHORIZATION_SERVERS,
   MCP_BEARER_TOKEN,
   MCP_RESOURCE_URL,
+  BUILD_COMMIT,
   PORT,
+  SERVER_VERSION,
 } from './config.js';
 import { getScixClient } from './clients/scix.js';
 
@@ -611,7 +613,12 @@ type AppContext = Context<AppEnv>;
 
 const app = new Hono<AppEnv>();
 
-app.get('/health', (c) => c.json({ status: 'ok', server: 'research-remote-mcp' }));
+app.get('/health', (c) => c.json({
+  status: 'ok',
+  server: 'research-remote-mcp',
+  version: SERVER_VERSION,
+  commit: BUILD_COMMIT ? BUILD_COMMIT.slice(0, 12) : undefined,
+}));
 
 function requestOrigin(c: AppContext): string | undefined {
   const host = c.req.header('host');

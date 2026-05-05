@@ -1,4 +1,11 @@
 export const PORT = parseInt(process.env.PORT ?? '3000', 10);
+export const SERVER_VERSION = process.env.npm_package_version ?? '1.0.0';
+export const BUILD_COMMIT = (
+  process.env.RAILWAY_GIT_COMMIT_SHA ??
+  process.env.GIT_COMMIT_SHA ??
+  process.env.SOURCE_VERSION ??
+  ''
+).trim();
 
 export const SCIX_API_BASE = 'https://api.adsabs.harvard.edu/v1';
 export const REQUEST_TIMEOUT = 30_000;

@@ -24,6 +24,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /build/build ./build
+COPY data/ ./data/
 
 EXPOSE 3000
 
