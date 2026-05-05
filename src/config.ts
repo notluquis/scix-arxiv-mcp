@@ -21,3 +21,9 @@ export function getScixApiKey(): string {
 
 export const ARXIV_API_URL = 'https://export.arxiv.org/api/query';
 export const ARXIV_MAX_RESULTS = parseInt(process.env.ARXIV_MAX_RESULTS ?? '10', 10);
+
+export const MCP_BEARER_TOKEN = process.env.MCP_BEARER_TOKEN?.trim() || undefined;
+export const MCP_ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);

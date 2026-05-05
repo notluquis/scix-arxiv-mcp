@@ -41,6 +41,7 @@ claude.ai
 | `arxiv_get_paper` | Full metadata + abstract by arXiv ID; returns links to PDF and HTML versions |
 | `arxiv_read_paper` | Extract full text from arXiv HTML or source archive and return markdown-ready paper text |
 | `arxiv_download_paper` | Download a paper from arXiv and extract full text directly from the PDF |
+| `arxiv_citation_graph` | Get citing and referenced papers for an arXiv ID from Semantic Scholar |
 
 ### Prompts
 
@@ -48,6 +49,9 @@ claude.ai
 |--------|-------------|
 | `research_discovery` | Explore a topic: find influential papers, key authors, open questions |
 | `deep_paper_analysis` | Deep analysis of a specific paper: methodology, results, limitations, context |
+| `summarize_paper` | Concise structured summary of one paper |
+| `compare_papers` | Side-by-side comparison across arXiv papers |
+| `literature_review` | Structured literature review for a topic and optional paper set |
 | `literature_synthesis` | Synthesize findings across multiple papers into a state-of-the-art review |
 
 ## Architecture
@@ -72,7 +76,7 @@ Dockerfile            # multi-stage node:22-alpine
 railway.json          # Railway deployment config
 ```
 
-The server is **stateless** — a new MCP server instance is created per request. No sessions, no in-memory state. This keeps deployment simple and makes horizontal scaling trivial.
+The server is **stateless** — a new MCP server instance is created per request. No sessions, no in-memory state. This keeps deployment simple and makes horizontal scaling trivial. The MCP endpoint supports Streamable HTTP over `GET /mcp` and `POST /mcp`.
 
 ## Why Hono
 
@@ -93,7 +97,11 @@ Create an account at [scixplorer.org](https://scixplorer.org) and generate a tok
 ```env
 SCIX_API_TOKEN=your_token_here   # required
 PORT=3000                         # optional, default 3000
+MCP_BEARER_TOKEN=secret           # optional, require Authorization: Bearer secret for /mcp
+MCP_ALLOWED_ORIGINS=https://app.example.com,https://claude.ai  # optional extra Origin allowlist
 ```
+
+If `MCP_ALLOWED_ORIGINS` is unset, requests without an `Origin` header are allowed and requests with an `Origin` header must match the request host. Set explicit origins in production when the server is behind a known client/proxy.
 
 ### 3. Run locally
 
@@ -142,7 +150,7 @@ This project is built on top of the work of:
 **[arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server)** by [Joseph Blazick](https://github.com/blazickjp)
 — Python MCP server for arXiv search and paper access. The arXiv tool design, query patterns, and category handling in this project are based on his implementation.
 
-Both original projects are MIT-licensed and included under `vendor/` as reference source.
+`scix-mcp` is MIT-licensed. `arxiv-mcp-server` is Apache-2.0-licensed. Both projects are included under `vendor/` as reference source.
 
 ## License
 
