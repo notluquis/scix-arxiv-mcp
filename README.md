@@ -68,9 +68,9 @@ src/
 └── tools/            # one file per tool (schema + handler)
 
 test/                 # vitest tests
-vendor/               # reference source (not deployed)
-  ├── arxiv-mcp-server/   # original Python server by Joseph Blazick
-  └── scix-mcp/           # original TypeScript server by Tim Hostetler
+data/
+└── scix/
+    └── chunked-index.json # generated SciX docs search index
 
 Dockerfile            # multi-stage node:22-alpine
 railway.json          # Railway deployment config
@@ -137,7 +137,7 @@ pnpm dev              # watch + run (tsx)
 - **Hono** + `@hono/node-server` — HTTP server with native Node.js bindings
 - **MCP SDK** `@modelcontextprotocol/sdk` — Streamable HTTP transport (stateless)
 - **Zod v4** — schema validation and type inference
-- **TypeScript 5.9** / Node.js 22
+- **TypeScript 6.0** / Node.js 22
 - **vitest** — test suite across all tools and clients
 
 ## Credits
@@ -150,7 +150,7 @@ This project is built on top of the work of:
 **[arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server)** by [Joseph Blazick](https://github.com/blazickjp)
 — Python MCP server for arXiv search and paper access. The arXiv tool design, query patterns, and category handling in this project are based on his implementation.
 
-`scix-mcp` is MIT-licensed. `arxiv-mcp-server` is Apache-2.0-licensed. Both projects are included under `vendor/` as reference source.
+`scix-mcp` is MIT-licensed. `arxiv-mcp-server` is Apache-2.0-licensed. This repo does not vendor those upstream projects; it keeps only the generated SciX docs search index under `data/scix/`.
 
 ## License
 

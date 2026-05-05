@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_PATH = path.join(__dirname, '..', '..', 'vendor', 'scix-mcp', 'data', 'scix', 'chunked-index.json');
+const DOCS_PATH = path.join(__dirname, '..', '..', 'data', 'scix', 'chunked-index.json');
 const SNIPPET_MAX_LENGTH = 260;
 
 interface DocChunk {
