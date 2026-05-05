@@ -39,8 +39,8 @@ claude.ai
 |------|-------------|
 | `arxiv_search` | Search preprints with field prefixes (`ti:`, `au:`, `abs:`, `cat:`), date ranges, and category filters |
 | `arxiv_get_paper` | Full metadata + abstract by arXiv ID; returns links to PDF and HTML versions |
-| `arxiv_read_paper` | Extract full text from arXiv HTML or source archive and return markdown-ready paper text |
-| `arxiv_download_paper` | Download a paper from arXiv and extract full text directly from the PDF |
+| `arxiv_read_paper` | Extract text from arXiv HTML or source archive; supports `offset`/`max_chars` pagination for long papers |
+| `arxiv_download_paper` | Download a paper from arXiv and extract PDF text; supports `offset`/`max_chars` pagination |
 | `arxiv_citation_graph` | Get citing and referenced papers for an arXiv ID from Semantic Scholar |
 
 ### Prompts

@@ -119,4 +119,48 @@ Important method details.
     expect(result).toContain('Introduction');
     expect(result).toContain('TeX body with more substance than the abstract');
   });
+
+  it('paginates long extracted paper text', async () => {
+    const longBody = 'A'.repeat(1500) + 'NEXT_PAGE_MARKER';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/api/query')) {
+        return makeResponse({ text: makeAtomFeed([PAPER_1]) });
+      }
+
+      if (url.includes('/html/2103.01231')) {
+        return makeResponse({ text: `
+          <html>
+            <body>
+              <article>
+                <h1>Attention Is All You Need</h1>
+                <section><h2>Introduction</h2><p>${longBody}</p></section>
+                <section><h2>Method</h2><p>More HTML content.</p></section>
+                <section><h2>Conclusion</h2><p>Done.</p></section>
+                <section><h2>References</h2><p>[1] Vaswani et al.</p></section>
+              </article>
+            </body>
+          </html>
+        ` });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    global.fetch = fetchMock as typeof fetch;
+
+    const firstPage = await handleArxivReadPaper({
+      paper_id: '2103.01231',
+      offset: 0,
+      max_chars: 1000,
+    });
+    const secondPage = await handleArxivReadPaper({
+      paper_id: '2103.01231',
+      offset: 1000,
+      max_chars: 1000,
+    });
+
+    expect(firstPage).toContain('offset=1000');
+    expect(firstPage).not.toContain('NEXT_PAGE_MARKER');
+    expect(secondPage).toContain('NEXT_PAGE_MARKER');
+  });
 });

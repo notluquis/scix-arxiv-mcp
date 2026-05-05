@@ -94,7 +94,45 @@ export function formatArxivList(papers: ArxivPaper[]): string {
   return result;
 }
 
-export function formatArxivReadPaper(result: ArxivReadPaperResult): string {
+interface FullTextFormatOptions {
+  offset?: number;
+  maxChars?: number;
+}
+
+const DEFAULT_FULL_TEXT_CHARS = 12_000;
+
+function sliceFullText(text: string, options: FullTextFormatOptions = {}) {
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const maxChars = Math.max(1, Math.floor(options.maxChars ?? DEFAULT_FULL_TEXT_CHARS));
+  const totalChars = text.length;
+  const end = Math.min(totalChars, offset + maxChars);
+
+  return {
+    text: text.slice(offset, end),
+    offset,
+    end,
+    totalChars,
+    hasMore: end < totalChars,
+  };
+}
+
+function formatPaginationNote(slice: ReturnType<typeof sliceFullText>): string {
+  if (!slice.hasMore) {
+    return `\n\n_Showing characters ${slice.offset}-${slice.end} of ${slice.totalChars}._`;
+  }
+
+  return [
+    '',
+    '',
+    `_Showing characters ${slice.offset}-${slice.end} of ${slice.totalChars}._`,
+    `_More text is available. Call this tool again with \`offset=${slice.end}\` to continue._`,
+  ].join('\n');
+}
+
+export function formatArxivReadPaper(
+  result: ArxivReadPaperResult,
+  options: FullTextFormatOptions = {}
+): string {
   if (!result.paper) {
     return 'No paper found.';
   }
@@ -115,12 +153,18 @@ export function formatArxivReadPaper(result: ArxivReadPaperResult): string {
   if (paper.doi) {
     output += `**DOI:** https://doi.org/${paper.doi}\n\n`;
   }
-  output += `## Extracted text\n\n${result.content.trim()}\n`;
+  const content = result.content.trim();
+  const slice = sliceFullText(content, options);
+  output += `## Extracted text\n\n${slice.text.trim()}${formatPaginationNote(slice)}\n`;
 
   return output.trim() + '\n';
 }
 
-export function formatArxivFullText(p: ArxivPaper, fullText: string): string {
+export function formatArxivFullText(
+  p: ArxivPaper,
+  fullText: string,
+  options: FullTextFormatOptions = {}
+): string {
   const authorStr = p.authors.length > 3
     ? `${p.authors.slice(0, 3).join(', ')} et al.`
     : p.authors.join(', ');
@@ -133,7 +177,13 @@ export function formatArxivFullText(p: ArxivPaper, fullText: string): string {
   result += `**Published:** ${date}\n\n`;
   result += `**Links:** [Abstract](${p.absUrl}) | [PDF](${p.pdfUrl}) | [HTML](${p.htmlUrl})\n\n`;
   result += `## Abstract\n\n${p.abstract}\n\n`;
-  result += `## Full text\n\n${fullText || '_No text could be extracted from the PDF._'}\n\n`;
+  const content = fullText.trim();
+  if (content) {
+    const slice = sliceFullText(content, options);
+    result += `## Full text\n\n${slice.text.trim()}${formatPaginationNote(slice)}\n\n`;
+  } else {
+    result += '## Full text\n\n_No text could be extracted from the PDF._\n\n';
+  }
 
   return result;
 }
