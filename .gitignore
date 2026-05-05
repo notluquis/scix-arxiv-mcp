@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 .pnpm-store/
-pnpm-workspace.yaml
 package-lock.json
 
 # Build output
