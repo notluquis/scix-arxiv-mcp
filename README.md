@@ -99,9 +99,14 @@ SCIX_API_TOKEN=your_token_here   # required
 PORT=3000                         # optional, default 3000
 MCP_BEARER_TOKEN=secret           # optional, require Authorization: Bearer secret for /mcp
 MCP_ALLOWED_ORIGINS=https://app.example.com,https://claude.ai  # optional exact Origin allowlist
+MCP_RESOURCE_URL=https://your-domain.railway.app/mcp  # optional canonical MCP resource URL
+MCP_AUTHORIZATION_SERVERS=https://auth.example.com     # optional OAuth authorization server metadata issuer(s)
+MCP_AUTH_SCOPES=research:read,research:write           # optional scopes for WWW-Authenticate challenges
 ```
 
 Requests without an `Origin` header are allowed for server-to-server MCP clients. Requests with an `Origin` header must match `MCP_ALLOWED_ORIGINS`; when the allowlist is unset, only localhost origins are accepted for local development. Set explicit origins in production when using browser-based clients.
+
+`MCP_BEARER_TOKEN` is a simple private-deployment guard. For OAuth-compatible deployments, set `MCP_RESOURCE_URL` and `MCP_AUTHORIZATION_SERVERS`; the server will expose OAuth Protected Resource Metadata at `/.well-known/oauth-protected-resource` and include `resource_metadata` in `WWW-Authenticate` responses.
 
 ### 3. Run locally
 

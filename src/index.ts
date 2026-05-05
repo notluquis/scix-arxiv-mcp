@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import type { HttpBindings } from '@hono/node-server';
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
+import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -8,7 +9,14 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
-import { MCP_ALLOWED_ORIGINS, MCP_BEARER_TOKEN, PORT } from './config.js';
+import {
+  MCP_ALLOWED_ORIGINS,
+  MCP_AUTH_SCOPES,
+  MCP_AUTHORIZATION_SERVERS,
+  MCP_BEARER_TOKEN,
+  MCP_RESOURCE_URL,
+  PORT,
+} from './config.js';
 import { getScixClient } from './clients/scix.js';
 
 // SciX tools
@@ -305,17 +313,19 @@ function createMcpServer(): McpServer {
 
   // ── Prompts ────────────────────────────────────────────────────────────
 
-  server.prompt(
+  server.registerPrompt(
     'research_discovery',
-    'Begin exploring a research topic: search for relevant papers, identify key authors, ' +
-    'and map the research landscape.',
     {
-      topic: z.string().describe('Research topic or question to explore'),
-      expertise_level: z.enum(['beginner', 'intermediate', 'expert'])
-        .default('intermediate')
-        .describe('Your familiarity with the topic'),
-      time_period: z.string().optional().describe('Time period of interest, e.g. "2020-present"'),
-      domain: z.string().optional().describe('Domain hint, e.g. "machine learning", "astrophysics"'),
+      description: 'Begin exploring a research topic: search for relevant papers, identify key authors, ' +
+        'and map the research landscape.',
+      argsSchema: {
+        topic: z.string().describe('Research topic or question to explore'),
+        expertise_level: z.enum(['beginner', 'intermediate', 'expert'])
+          .default('intermediate')
+          .describe('Your familiarity with the topic'),
+        time_period: z.string().optional().describe('Time period of interest, e.g. "2020-present"'),
+        domain: z.string().optional().describe('Domain hint, e.g. "machine learning", "astrophysics"'),
+      },
     },
     ({ topic, expertise_level, time_period, domain }) => ({
       messages: [{
@@ -339,15 +349,17 @@ function createMcpServer(): McpServer {
     })
   );
 
-  server.prompt(
+  server.registerPrompt(
     'deep_paper_analysis',
-    'Perform a deep analysis of a specific arXiv paper: methodology, contributions, ' +
-    'limitations, and position in the literature.',
     {
-      paper_id: z.string().describe('arXiv paper ID, e.g. "2103.01231"'),
-      focus: z.enum([
-        'methodology', 'results', 'limitations', 'related_work', 'reproducibility',
-      ]).default('methodology').describe('Aspect to focus the analysis on'),
+      description: 'Perform a deep analysis of a specific arXiv paper: methodology, contributions, ' +
+        'limitations, and position in the literature.',
+      argsSchema: {
+        paper_id: z.string().describe('arXiv paper ID, e.g. "2103.01231"'),
+        focus: z.enum([
+          'methodology', 'results', 'limitations', 'related_work', 'reproducibility',
+        ]).default('methodology').describe('Aspect to focus the analysis on'),
+      },
     },
     ({ paper_id, focus }) => ({
       messages: [{
@@ -451,11 +463,13 @@ function createMcpServer(): McpServer {
     })
   );
 
-  server.prompt(
+  server.registerPrompt(
     'summarize_paper',
-    'Summarize a paper with key methods, results, limits, and practical takeaways.',
     {
-      paper_id: z.string().describe('arXiv paper ID, e.g. "2103.01231"'),
+      description: 'Summarize a paper with key methods, results, limits, and practical takeaways.',
+      argsSchema: {
+        paper_id: z.string().describe('arXiv paper ID, e.g. "2103.01231"'),
+      },
     },
     ({ paper_id }) => ({
       messages: [{
@@ -483,11 +497,13 @@ function createMcpServer(): McpServer {
     })
   );
 
-  server.prompt(
+  server.registerPrompt(
     'compare_papers',
-    'Compare two or more papers on methods, results, assumptions, and tradeoffs.',
     {
-      paper_ids: z.string().describe('Comma-separated arXiv paper IDs'),
+      description: 'Compare two or more papers on methods, results, assumptions, and tradeoffs.',
+      argsSchema: {
+        paper_ids: z.string().describe('Comma-separated arXiv paper IDs'),
+      },
     },
     ({ paper_ids }) => ({
       messages: [{
@@ -515,12 +531,14 @@ function createMcpServer(): McpServer {
     })
   );
 
-  server.prompt(
+  server.registerPrompt(
     'literature_review',
-    'Synthesize a structured literature review for a topic and optional paper set.',
     {
-      topic: z.string().describe('Research topic or question'),
-      paper_ids: z.string().optional().describe('Optional comma-separated arXiv paper IDs'),
+      description: 'Synthesize a structured literature review for a topic and optional paper set.',
+      argsSchema: {
+        topic: z.string().describe('Research topic or question'),
+        paper_ids: z.string().optional().describe('Optional comma-separated arXiv paper IDs'),
+      },
     },
     ({ topic, paper_ids }) => ({
       messages: [{
@@ -548,14 +566,16 @@ function createMcpServer(): McpServer {
     })
   );
 
-  server.prompt(
+  server.registerPrompt(
     'literature_synthesis',
-    'Synthesize findings across multiple papers into a coherent review of the state of the art.',
     {
-      paper_ids: z.string().describe('Comma-separated arXiv or SciX bibcodes'),
-      synthesis_goal: z.string().optional().describe(
-        'What you want to understand, e.g. "compare approaches to X", "find consensus on Y"'
-      ),
+      description: 'Synthesize findings across multiple papers into a coherent review of the state of the art.',
+      argsSchema: {
+        paper_ids: z.string().describe('Comma-separated arXiv or SciX bibcodes'),
+        synthesis_goal: z.string().optional().describe(
+          'What you want to understand, e.g. "compare approaches to X", "find consensus on Y"'
+        ),
+      },
     },
     ({ paper_ids, synthesis_goal }) => ({
       messages: [{
@@ -593,6 +613,66 @@ const app = new Hono<AppEnv>();
 
 app.get('/health', (c) => c.json({ status: 'ok', server: 'research-remote-mcp' }));
 
+function requestOrigin(c: AppContext): string | undefined {
+  const host = c.req.header('host');
+  if (!host) return undefined;
+
+  const proto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() || 'https';
+  return `${proto}://${host}`;
+}
+
+function resourceUrl(c: AppContext): string | undefined {
+  if (MCP_RESOURCE_URL) return MCP_RESOURCE_URL;
+  const origin = requestOrigin(c);
+  return origin ? `${origin}/mcp` : undefined;
+}
+
+function protectedResourceMetadataUrl(c: AppContext): string | undefined {
+  if (MCP_RESOURCE_URL) {
+    try {
+      return new URL('/.well-known/oauth-protected-resource', MCP_RESOURCE_URL).toString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  const origin = requestOrigin(c);
+  return origin ? `${origin}/.well-known/oauth-protected-resource` : undefined;
+}
+
+function protectedResourceMetadata(c: AppContext) {
+  const resource = resourceUrl(c);
+  if (!resource || MCP_AUTHORIZATION_SERVERS.length === 0) return undefined;
+
+  return {
+    resource,
+    authorization_servers: MCP_AUTHORIZATION_SERVERS,
+    bearer_methods_supported: ['header'],
+    scopes_supported: MCP_AUTH_SCOPES.length > 0 ? MCP_AUTH_SCOPES : undefined,
+  };
+}
+
+function bearerChallenge(c: AppContext): string {
+  const params = ['realm="research-remote-mcp"'];
+  const metadataUrl = protectedResourceMetadataUrl(c);
+
+  if (MCP_AUTHORIZATION_SERVERS.length > 0 && metadataUrl) {
+    params.push(`resource_metadata="${metadataUrl}"`);
+  }
+
+  if (MCP_AUTHORIZATION_SERVERS.length > 0 && MCP_AUTH_SCOPES.length > 0) {
+    params.push(`scope="${MCP_AUTH_SCOPES.join(' ')}"`);
+  }
+
+  return `Bearer ${params.join(', ')}`;
+}
+
+function isSameSecret(value: string, expected: string): boolean {
+  const valueBuffer = Buffer.from(value);
+  const expectedBuffer = Buffer.from(expected);
+  return valueBuffer.length === expectedBuffer.length && timingSafeEqual(valueBuffer, expectedBuffer);
+}
+
 function isLocalOrigin(origin: string): boolean {
   try {
     const { hostname } = new URL(origin);
@@ -611,8 +691,29 @@ function isAllowedOrigin(c: AppContext): boolean {
 
 function isAuthorized(c: AppContext): boolean {
   if (!MCP_BEARER_TOKEN) return true;
-  return c.req.header('authorization') === `Bearer ${MCP_BEARER_TOKEN}`;
+  const header = c.req.header('authorization') ?? '';
+  const prefix = 'Bearer ';
+  if (!header.startsWith(prefix)) return false;
+  return isSameSecret(header.slice(prefix.length), MCP_BEARER_TOKEN);
 }
+
+app.get('/.well-known/oauth-protected-resource', (c) => {
+  const metadata = protectedResourceMetadata(c);
+  if (!metadata) {
+    return c.json({ error: 'Not Found', detail: 'OAuth protected resource metadata is not configured.' }, 404);
+  }
+
+  return c.json(metadata);
+});
+
+app.get('/.well-known/oauth-protected-resource/mcp', (c) => {
+  const metadata = protectedResourceMetadata(c);
+  if (!metadata) {
+    return c.json({ error: 'Not Found', detail: 'OAuth protected resource metadata is not configured.' }, 404);
+  }
+
+  return c.json(metadata);
+});
 
 async function handleMcpRequest(c: AppContext, body?: unknown) {
   if (!isAllowedOrigin(c)) {
@@ -620,7 +721,7 @@ async function handleMcpRequest(c: AppContext, body?: unknown) {
   }
 
   if (!isAuthorized(c)) {
-    c.header('WWW-Authenticate', 'Bearer realm="research-remote-mcp"');
+    c.header('WWW-Authenticate', bearerChallenge(c));
     return c.json({ error: 'Unauthorized', detail: 'Missing or invalid bearer token.' }, 401);
   }
 

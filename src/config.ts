@@ -27,3 +27,12 @@ export const MCP_ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS ?? '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+export const MCP_RESOURCE_URL = process.env.MCP_RESOURCE_URL?.trim().replace(/\/$/, '') || undefined;
+export const MCP_AUTHORIZATION_SERVERS = (process.env.MCP_AUTHORIZATION_SERVERS ?? '')
+  .split(',')
+  .map(url => url.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+export const MCP_AUTH_SCOPES = (process.env.MCP_AUTH_SCOPES ?? '')
+  .split(/[,\s]+/)
+  .map(scope => scope.trim())
+  .filter(Boolean);
