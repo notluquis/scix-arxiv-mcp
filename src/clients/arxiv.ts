@@ -5,7 +5,7 @@ import { cached, TTL_UNVERSIONED_MS, TTL_VERSIONED_MS } from '../cache.js';
 import { ARXIV_API_URL } from '../config.js';
 import { fetchWithPolicy } from '../http.js';
 import {
-  extractHtmlText, htmlToText, normalizeText, parseSections, textToSections, type PaperSection,
+  extractHtmlText, htmlToText, normalizeText, parseSections, textToSections, tidySections, type PaperSection,
 } from './arxiv_html.js';
 import { arxivIdWithVersion, normalizeArxivId, type ArxivId } from '../ids.js';
 
@@ -440,5 +440,8 @@ export async function arxivSectionedPaper(
     if (fromPdf.length === 0) throw new Error(`No section structure or text could be obtained for ${urlId}.`);
     return { source: 'pdf', sections: fromPdf };
   });
-  return { paper, arxivId: paper.id, version: id.version, sectioned };
+  return {
+    paper, arxivId: paper.id, version: id.version,
+    sectioned: { ...sectioned, sections: tidySections(sectioned.sections) },
+  };
 }

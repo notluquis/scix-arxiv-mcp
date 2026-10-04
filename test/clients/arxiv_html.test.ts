@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { htmlToText, mathmlToTex, parseSections, textToSections } from '../../src/clients/arxiv_html.js';
+import { htmlToText, mathmlToTex, parseSections, textToSections, tidySections } from '../../src/clients/arxiv_html.js';
 
 const FIXTURE = readFileSync(new URL('../fixtures/arxiv_html_latexml.html', import.meta.url), 'utf8');
 
@@ -98,5 +98,38 @@ describe('textToSections (PDF heuristics)', () => {
   it('duplicate numbering gets distinct ids', () => {
     const ids = textToSections('1 Intro\nx\n1 Intro\ny').map(s => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('tidy section text', () => {
+  it('collapses runs of spaces and tabs (cites, refs) but keeps newlines and the TeX inside $...$', () => {
+    const html = '<p>Brown <span> </span> et al. <cite> (<a>2020</a>) </cite>   enables   <math alttext="a  b">x</math> here\t\tand there.</p><p>Next</p>';
+    const text = htmlToText(html);
+    expect(text).not.toMatch(/[ \t]{2,}/);
+    expect(text).toContain('Brown et al. ( 2020 ) enables');
+    expect(text).toContain('$a b$');
+    expect(text).toContain('\n\nNext');
+  });
+
+  it('drops the heading that LaTeXML repeats as the first line of the section body', () => {
+    const sections = parseSections(FIXTURE);
+    const s1 = sections.find(s => s.id === 'S1')!;
+    expect(s1.text.startsWith('Protoplanetary disks host')).toBe(true);
+    expect(sections.find(s => s.id === 'abstract')!.text.startsWith('We measure dust masses')).toBe(true);
+    expect(sections.find(s => s.id === 'A1')!.text).toBe('Full target list.');
+    // a body that merely repeats the title later is not touched
+    const odd = parseSections(
+      '<section id="S1" class="ltx_section"><h2 class="ltx_title"><span class="ltx_tag">1 </span>Data</h2><p>Data are shown.</p></section>'
+    );
+    expect(odd[0].text).toBe('Data are shown.');
+  });
+
+  it('empty titles fall back to the id; a section with neither title nor text is skipped', () => {
+    const out = tidySections([
+      { id: 'S4.SS3', level: 2, title: '  ', text: 'Body.' },
+      { id: 'S4.SS4', level: 2, title: '', text: ' ' },
+      { id: 'S5', level: 1, title: 'Real', text: '' },
+    ]);
+    expect(out.map(s => [s.id, s.title])).toEqual([['S4.SS3', 'S4.SS3'], ['S5', 'Real']]);
   });
 });

@@ -45,7 +45,9 @@ export function extractHtmlText(html: string): string {
     .replace(/<\s*(p|div|li|section|article|header|footer|main|aside|nav|figure|figcaption|blockquote|h[1-6]|tr|td|th|table|ul|ol|pre|dd|dt)[^>]*>/gi, '')
     .replace(/<[^>]+>/g, ' ');
 
-  return normalizeText(decodeHtmlEntities(stripped)).replace(/\n{3,}/g, '\n\n');
+  // Tag removal leaves runs of spaces around citations and refs; collapse them (newlines stay).
+  const collapsed = decodeHtmlEntities(stripped).replace(/[ \t]+/g, ' ').replace(/\n /g, '\n');
+  return normalizeText(collapsed).replace(/\n{3,}/g, '\n\n');
 }
 
 // ── MathML → TeX ─────────────────────────────────────────────────────────────
@@ -174,9 +176,31 @@ export function parseSections(html: string): PaperSection[] {
       while (j < spans.length && spans[j].start < skipTo) j++;
     }
     own += html.slice(cursor, s.end);
-    sections.push({ id: s.id, level: s.level, title: s.title, text: htmlToText(own) });
+    sections.push({ id: s.id, level: s.level, title: s.title, text: dropHeadingLine(htmlToText(own), s.title) });
   }
   return sections;
+}
+
+/** LaTeXML repeats the heading as the first line of the body; the title is reported separately. */
+function dropHeadingLine(text: string, title: string): string {
+  const nl = text.indexOf('\n');
+  const first = (nl === -1 ? text : text.slice(0, nl)).replace(/\s+/g, ' ').trim();
+  if (!first || first !== title.replace(/\s+/g, ' ').trim()) return text;
+  return nl === -1 ? '' : text.slice(nl + 1).trim();
+}
+
+/**
+ * Final pass over a section list, whatever its source: a blank title falls back to the id, and a
+ * section with neither a title nor any text is dropped (it would be a bare "-" in the outline).
+ */
+export function tidySections(sections: PaperSection[]): PaperSection[] {
+  const out: PaperSection[] = [];
+  for (const s of sections) {
+    const title = s.title.trim();
+    if (!title && !s.text.trim()) continue;
+    out.push({ ...s, title: title || s.id });
+  }
+  return out;
 }
 
 // ── Plain-text (PDF) headings ────────────────────────────────────────────────
