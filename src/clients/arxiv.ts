@@ -1,12 +1,12 @@
 import { PDFParse } from 'pdf-parse';
-import { gunzipSync } from 'node:zlib';
 
 import { cached, TTL_UNVERSIONED_MS, TTL_VERSIONED_MS } from '../cache.js';
 import { ARXIV_API_URL } from '../config.js';
 import { fetchWithPolicy } from '../http.js';
 import {
-  extractHtmlText, htmlToText, normalizeText, parseSections, textToSections, tidySections, type PaperSection,
+  extractHtmlText, htmlToText, parseSections, textToSections, tidySections, type PaperSection,
 } from './arxiv_html.js';
+import { getFlatLatex, stripLatexCommands, type FlatLatex } from './latex.js';
 import { arxivIdWithVersion, normalizeArxivId, type ArxivId } from '../ids.js';
 
 export { extractHtmlText };
@@ -35,19 +35,6 @@ export interface ArxivReadPaperResult {
   /** Version that was requested, e.g. "v2"; undefined means latest. */
   version?: string;
 }
-
-interface TarEntry {
-  name: string;
-  data: Buffer;
-}
-
-const PREFERRED_TEX_FILENAMES = [
-  'main.tex',
-  'paper.tex',
-  'manuscript.tex',
-  'article.tex',
-  'ms.tex',
-];
 
 export interface ArxivSearchOptions {
   maxResults?: number;
@@ -200,102 +187,6 @@ export async function arxivGetPaper(paperId: string): Promise<ArxivPaper | null>
   return papers[0] ?? null;
 }
 
-function stripLatexCommands(text: string): string {
-  const headingMap: Record<string, string> = {
-    section: '#',
-    subsection: '##',
-    subsubsection: '###',
-    paragraph: '####',
-    subparagraph: '#####',
-  };
-
-  const output = text
-    .replace(/\\begin\{document\}/gi, '\n\n')
-    .replace(/\\end\{document\}/gi, '\n\n')
-    .replace(/\\(section|subsection|subsubsection|paragraph|subparagraph)\*?\{([^{}]+)\}/gi, (_match, name: string, title: string) => {
-      const level = headingMap[name.toLowerCase()] ?? '##';
-      return `\n\n${level} ${title.trim()}\n\n`;
-    })
-    .replace(/\\(textbf|textit|emph|underline)\{([^{}]+)\}/gi, '$2')
-    .replace(/\\(?:title|author|date)\{([^{}]+)\}/gi, '$1\n')
-    .replace(/\\(?:cite|citep|citet|autocite|parencite|textcite|ref|label)\{[^{}]*\}/gi, '')
-    .replace(/\\includegraphics(?:\[[^\]]*\])?\{[^{}]*\}/gi, '')
-    .replace(/\\item\b/gi, '\n- ')
-    .replace(/\\\\/g, '\n')
-    .replace(/\\[a-zA-Z@]+(?:\[[^\]]*\])?(?:\{([^{}]*)\})?/g, (_match, arg: string) => (arg ? ` ${arg} ` : ' '))
-    .replace(/(?<!\\)%.*$/gm, '')
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_match, math: string) => `\n\n$$${math.trim()}$$\n\n`)
-    .replace(/\$(?!\s)([^$]+?)\$/g, (_match, math: string) => `$${math.trim()}$`)
-    .replace(/~/g, ' ')
-    .replace(/\s+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n');
-
-  return normalizeText(output);
-}
-
-function parseTarEntries(buffer: Buffer): TarEntry[] {
-  const entries: TarEntry[] = [];
-  let offset = 0;
-
-  while (offset + 512 <= buffer.length) {
-    const header = buffer.subarray(offset, offset + 512);
-    if (header.every(byte => byte === 0)) break;
-
-    const name = header.toString('utf8', 0, 100).replace(/\0.*$/, '').trim();
-    const prefix = header.toString('utf8', 345, 500).replace(/\0.*$/, '').trim();
-    const fullName = prefix ? `${prefix}/${name}` : name;
-    const sizeString = header.toString('utf8', 124, 136).replace(/\0.*$/, '').trim();
-    const size = Number.parseInt(sizeString || '0', 8) || 0;
-    const typeFlag = header.toString('utf8', 156, 157);
-    const contentStart = offset + 512;
-    const contentEnd = contentStart + size;
-
-    if (contentEnd > buffer.length) break;
-
-    if (typeFlag === '\0' || typeFlag === '0' || typeFlag === '') {
-      entries.push({ name: fullName, data: buffer.subarray(contentStart, contentEnd) });
-    }
-
-    offset = contentStart + Math.ceil(size / 512) * 512;
-  }
-
-  return entries;
-}
-
-function chooseTexEntry(entries: TarEntry[]): TarEntry | undefined {
-  const texEntries = entries.filter(entry => /\.tex$/i.test(entry.name));
-  if (texEntries.length === 0) return undefined;
-
-  const scoreEntry = (entry: TarEntry): number => {
-    const base = entry.name.split('/').pop()?.toLowerCase() ?? entry.name.toLowerCase();
-    const preferredIndex = PREFERRED_TEX_FILENAMES.indexOf(base);
-    const rootBonus = entry.name.includes('/') ? 0 : 20;
-    return (preferredIndex >= 0 ? 100 - preferredIndex * 10 : 0) + rootBonus + Math.min(entry.data.length / 1000, 30);
-  };
-
-  return texEntries.sort((a, b) => scoreEntry(b) - scoreEntry(a))[0];
-}
-
-function extractTexText(archiveBytes: Buffer): { text: string; sourceName: string } | null {
-  let tarBytes = archiveBytes;
-
-  try {
-    tarBytes = gunzipSync(archiveBytes);
-  } catch {
-    // Source may already be a raw tar archive.
-  }
-
-  const entries = parseTarEntries(tarBytes);
-  const texEntry = chooseTexEntry(entries);
-
-  if (!texEntry) return null;
-
-  return {
-    text: stripLatexCommands(texEntry.data.toString('utf8')),
-    sourceName: texEntry.name,
-  };
-}
-
 function looksLikeFullPaperText(text: string, abstract = ''): boolean {
   const compact = text.toLowerCase();
   const paragraphCount = text.split(/\n{2,}/).filter(Boolean).length;
@@ -318,16 +209,6 @@ async function fetchHtmlPage(url: string): Promise<string | null> {
 }
 
 const fetchHtmlPaper = (urlId: string) => fetchHtmlPage(`https://arxiv.org/html/${urlId}`);
-
-async function fetchSourceArchive(urlId: string): Promise<Buffer | null> {
-  try {
-    const res = await fetchWithPolicy(`https://arxiv.org/e-print/${urlId}`, {}, { maxBytes: MAX_DOWNLOAD_BYTES });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
 
 function makeReadResult(
   paper: ArxivPaper,
@@ -380,13 +261,14 @@ export async function arxivReadPaper(
 
   if (source === 'auto' || source === 'latex') {
     await step('Fetching LaTeX source');
-    const texResult = await cached('latex', urlId, ttl, async () => {
-      const archive = await fetchSourceArchive(urlId);
-      return archive ? extractTexText(archive) : null;
-    });
-    if (texResult?.text) {
-      return makeReadResult(paper, 'latex', texResult.text, version, texResult.sourceName);
+    let flat: FlatLatex | undefined;
+    try {
+      flat = (await getFlatLatex(urlId)).flat;
+    } catch (e) {
+      if (source === 'latex') throw e; // an explicit source never falls back
     }
+    const texText = flat ? stripLatexCommands(flat.text) : '';
+    if (flat && texText) return makeReadResult(paper, 'latex', texText, version, flat.main);
     if (source === 'latex') throw new Error(`No LaTeX source available for ${urlId}. Try source="html" or "pdf".`);
   }
 
@@ -403,14 +285,13 @@ export async function arxivReadPaper(
 }
 
 export interface SectionedPaper {
-  source: 'html' | 'ar5iv' | 'pdf';
+  source: 'html' | 'ar5iv' | 'latex' | 'pdf';
   sections: PaperSection[];
 }
 
 /**
- * A paper split into sections. Sources, in order: arxiv.org/html, ar5iv, then PDF text with
+ * A paper split into sections. Sources, in order: arxiv.org/html, ar5iv, the LaTeX source, then PDF text with
  * heading heuristics. The flattened result is cached; a hit skips the fetch steps.
- * (LaTeX sections join this chain in Step 6.)
  */
 export async function arxivSectionedPaper(
   paperId: string,
@@ -433,6 +314,17 @@ export async function arxivSectionedPaper(
     const ar5iv = await fetchHtmlPage(`https://ar5iv.labs.arxiv.org/html/${urlId}`);
     const fromAr5iv = ar5iv ? parseSections(ar5iv) : [];
     if (fromAr5iv.length > 0) return { source: 'ar5iv', sections: fromAr5iv };
+
+    await step('Reading LaTeX source');
+    const flat = await getFlatLatex(urlId).then(r => r.flat, () => undefined);
+    if (flat && flat.sections.length > 0) {
+      return {
+        source: 'latex',
+        sections: flat.sections.map(s => ({
+          id: s.id, level: s.level, title: s.title, text: stripLatexCommands(flat.text.slice(s.start, s.end)),
+        })),
+      };
+    }
 
     await step('Extracting PDF text');
     const text = await fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`);

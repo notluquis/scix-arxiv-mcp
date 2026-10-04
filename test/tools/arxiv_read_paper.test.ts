@@ -2,33 +2,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { handleArxivReadPaper } from '../../src/tools/arxiv.js';
 import { makeAtomFeed, PAPER_1 } from '../helpers/arxivFixtures.js';
 import { restoreFetch } from '../helpers/mockFetch.js';
+import { makeTarArchive } from '../helpers/tar.js';
 import { UNTRUSTED_BANNER } from '../../src/content.js';
 
 const originalFetch = global.fetch;
-
-function createTarEntry(name: string, content: string): Buffer {
-  const data = Buffer.from(content, 'utf8');
-  const header = Buffer.alloc(512, 0);
-
-  header.write(name, 0, Math.min(100, Buffer.byteLength(name)), 'utf8');
-  header.write('0000777\0', 100, 'utf8');
-  header.write('0000000\0', 108, 'utf8');
-  header.write('0000000\0', 116, 'utf8');
-  header.write(data.length.toString(8).padStart(11, '0') + '\0', 124, 'utf8');
-  header.write('00000000000\0', 136, 'utf8');
-  header.write('        ', 148, 'utf8');
-  header[156] = '0'.charCodeAt(0);
-  header.write('ustar\0', 257, 'utf8');
-  header.write('00', 263, 'utf8');
-
-  const padding = Buffer.alloc((512 - (data.length % 512)) % 512, 0);
-  return Buffer.concat([header, data, padding]);
-}
-
-function makeTarArchive(files: Record<string, string>): Buffer {
-  const entries = Object.entries(files).map(([name, content]) => createTarEntry(name, content));
-  return Buffer.concat([...entries, Buffer.alloc(1024, 0)]);
-}
 
 function makeResponse(options: { text?: string; buffer?: Buffer; status?: number }) {
   const { text = '', buffer, status = 200 } = options;

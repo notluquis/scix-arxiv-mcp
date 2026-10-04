@@ -11,8 +11,8 @@ import { ARXIV_ICONS } from '../icons.js';
 const PAPER_ID_HELP =
   'arXiv paper ID, e.g. "2103.01231", "2103.01231v2" or "astro-ph/0601001" (optionally "arXiv:"-prefixed or an arxiv.org/abs URL).';
 
-// metadata, arXiv HTML, ar5iv fallback, PDF parse
-const PROGRESS_STEPS = 4;
+// metadata, arXiv HTML, ar5iv fallback, LaTeX source, PDF parse
+const PROGRESS_STEPS = 5;
 const MAX_HINT_IDS = 40;
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof arxivSectionedPaper>>>;
@@ -166,13 +166,13 @@ export function registerArxivSectionTools(server: McpServer): void {
     title: 'arXiv paper outline',
     description:
       'List the sections of an arXiv paper (id, level, title, size) without returning their text. ' +
-      'Uses the arXiv HTML rendering, then ar5iv, then PDF text with heading heuristics. ' +
+      'Uses the arXiv HTML rendering, then ar5iv, then the LaTeX source, then PDF text with heading heuristics. ' +
       'Follow with arxiv_read_paper_section for one section instead of reading the whole paper. ' +
       'Titles are untrusted external content and are returned behind a warning banner.',
     inputSchema: arxivOutlineSchema,
     outputSchema: z.object({
       arxiv_id: z.string(),
-      source: z.enum(['html', 'ar5iv', 'pdf']),
+      source: z.enum(['html', 'ar5iv', 'latex', 'pdf']),
       sections: z.array(z.object({ id: z.string(), level: z.number(), title: z.string(), chars: z.number() })),
     }),
     annotations: READ_EXTERNAL,
@@ -187,7 +187,7 @@ export function registerArxivSectionTools(server: McpServer): void {
     inputSchema: arxivReadSectionSchema,
     outputSchema: z.object({
       arxiv_id: z.string(),
-      source: z.enum(['html', 'ar5iv', 'pdf']),
+      source: z.enum(['html', 'ar5iv', 'latex', 'pdf']),
       section_id: z.string(),
       title: z.string(),
       offset: z.number(),
@@ -209,7 +209,7 @@ export function registerArxivSectionTools(server: McpServer): void {
     inputSchema: arxivSearchTextSchema,
     outputSchema: z.object({
       arxiv_id: z.string(),
-      source: z.enum(['html', 'ar5iv', 'pdf']),
+      source: z.enum(['html', 'ar5iv', 'latex', 'pdf']),
       query: z.string(),
       total_passages: z.number(),
       passages: z.array(z.object({ section_id: z.string(), offset: z.number(), snippet: z.string() })),

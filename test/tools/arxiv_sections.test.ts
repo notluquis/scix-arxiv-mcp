@@ -170,7 +170,7 @@ describe('progress notifications', () => {
     const values = seen.map(p => p.progress);
     expect(values).toEqual([1, 2, 3]);
     for (let i = 1; i < values.length; i++) expect(values[i]).toBeGreaterThan(values[i - 1]);
-    expect(seen.every(p => p.total === 4)).toBe(true);
+    expect(seen.every(p => p.total === 5)).toBe(true);
   });
 
   it('arxiv_read_paper reports progress too (metadata, HTML)', async () => {

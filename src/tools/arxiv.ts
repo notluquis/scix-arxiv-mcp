@@ -6,6 +6,7 @@ import { fetchWithPolicy } from '../http.js';
 import {
   formatArxivList, formatArxivPaper, formatArxivReadPaper,
 } from '../formatters.js';
+import { registerArxivLatexTools } from './arxiv_latex.js';
 import { registerArxivSectionTools } from './arxiv_sections.js';
 import { ARXIV_ICONS } from '../icons.js';
 import { normalizeArxivId } from '../ids.js';
@@ -405,6 +406,7 @@ export function registerArxivTools(server: McpServer): void {
   }, (input, ctx) => handleArxivReadPaper(input, progress(ctx, 4)));
 
   registerArxivSectionTools(server);
+  registerArxivLatexTools(server);
 
   addTool(server, 'arxiv_citation_graph', {
     title: 'arXiv citation graph',

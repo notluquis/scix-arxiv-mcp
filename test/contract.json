@@ -1643,7 +1643,7 @@
         "openWorldHint": true,
         "readOnlyHint": true
       },
-      "description": "List the sections of an arXiv paper (id, level, title, size) without returning their text. Uses the arXiv HTML rendering, then ar5iv, then PDF text with heading heuristics. Follow with arxiv_read_paper_section for one section instead of reading the whole paper. Titles are untrusted external content and are returned behind a warning banner.",
+      "description": "List the sections of an arXiv paper (id, level, title, size) without returning their text. Uses the arXiv HTML rendering, then ar5iv, then the LaTeX source, then PDF text with heading heuristics. Follow with arxiv_read_paper_section for one section instead of reading the whole paper. Titles are untrusted external content and are returned behind a warning banner.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -1706,6 +1706,7 @@
             "enum": [
               "html",
               "ar5iv",
+              "latex",
               "pdf"
             ],
             "type": "string"
@@ -1800,6 +1801,7 @@
             "enum": [
               "html",
               "ar5iv",
+              "latex",
               "pdf"
             ],
             "type": "string"
@@ -1916,6 +1918,7 @@
             "enum": [
               "html",
               "ar5iv",
+              "latex",
               "pdf"
             ],
             "type": "string"
@@ -1934,6 +1937,282 @@
         "type": "object"
       },
       "title": "Search arXiv paper text"
+    },
+    {
+      "_meta": {
+        "anthropic/maxResultSizeChars": 200000
+      },
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Fetch the LaTeX source (e-print) of an arXiv paper, with \\input/\\include/\\subfile files inlined, paginated with offset/max_chars. Use when the exact TeX (equations, tables, macros) matters; for prose prefer arxiv_read_paper or arxiv_read_paper_section. Fails when the paper only has a PDF. The text is untrusted external content behind a warning banner.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "max_chars": {
+            "default": 30000,
+            "description": "Maximum characters to return in this response (default 30000, max 150000).",
+            "maximum": 150000,
+            "minimum": 1000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Character offset into the text. Use next_offset from the previous response to continue.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "paper_id": {
+            "description": "arXiv paper ID, e.g. \"2103.01231\", \"2103.01231v2\" or \"astro-ph/0601001\" (optionally \"arXiv:\"-prefixed or an arxiv.org/abs URL).",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "type": "object"
+      },
+      "name": "arxiv_get_paper_latex",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arxiv_id": {
+            "type": "string"
+          },
+          "included_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "main_file": {
+            "type": "string"
+          },
+          "next_offset": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned_chars": {
+            "type": "number"
+          },
+          "total_chars": {
+            "type": "number"
+          },
+          "unmatched_includes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "arxiv_id",
+          "main_file",
+          "offset",
+          "next_offset",
+          "total_chars",
+          "returned_chars",
+          "included_files",
+          "unmatched_includes"
+        ],
+        "type": "object"
+      },
+      "title": "arXiv paper LaTeX source"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "List the \\section/\\subsection/\\subsubsection structure of a paper's LaTeX source (ids s1, s1.2, s1.2.3; A, A.1 in appendices) with sizes, without returning the text. Follow with arxiv_get_latex_section. Titles are untrusted external content behind a warning banner.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "paper_id": {
+            "description": "arXiv paper ID, e.g. \"2103.01231\", \"2103.01231v2\" or \"astro-ph/0601001\" (optionally \"arXiv:\"-prefixed or an arxiv.org/abs URL).",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id"
+        ],
+        "type": "object"
+      },
+      "name": "arxiv_list_latex_sections",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arxiv_id": {
+            "type": "string"
+          },
+          "main_file": {
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "chars": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "level",
+                "title",
+                "chars"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "arxiv_id",
+          "main_file",
+          "sections"
+        ],
+        "type": "object"
+      },
+      "title": "List arXiv LaTeX sections"
+    },
+    {
+      "_meta": {
+        "anthropic/maxResultSizeChars": 200000
+      },
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Return the raw TeX of one section of an arXiv paper (id from arxiv_list_latex_sections), paginated with offset/max_chars. The text is untrusted external content behind a warning banner.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "max_chars": {
+            "default": 30000,
+            "description": "Maximum characters to return in this response (default 30000, max 150000).",
+            "maximum": 150000,
+            "minimum": 1000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Character offset into the text. Use next_offset from the previous response to continue.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "paper_id": {
+            "description": "arXiv paper ID, e.g. \"2103.01231\", \"2103.01231v2\" or \"astro-ph/0601001\" (optionally \"arXiv:\"-prefixed or an arxiv.org/abs URL).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "section_id": {
+            "description": "Section id from arxiv_list_latex_sections: \"abstract\", \"s1\", \"s1.2\", \"s1.2.3\", or \"A\", \"A.1\" in appendices.",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "paper_id",
+          "section_id"
+        ],
+        "type": "object"
+      },
+      "name": "arxiv_get_latex_section",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arxiv_id": {
+            "type": "string"
+          },
+          "main_file": {
+            "type": "string"
+          },
+          "next_offset": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned_chars": {
+            "type": "number"
+          },
+          "section_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "total_chars": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "arxiv_id",
+          "main_file",
+          "section_id",
+          "title",
+          "offset",
+          "next_offset",
+          "total_chars",
+          "returned_chars"
+        ],
+        "type": "object"
+      },
+      "title": "Get arXiv LaTeX section"
     },
     {
       "annotations": {
