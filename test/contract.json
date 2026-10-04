@@ -1689,6 +1689,174 @@
         "openWorldHint": true,
         "readOnlyHint": false
       },
+      "description": "Rename a SciX library or change its description or public/private visibility. Pass only the fields to change.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "description": {
+            "description": "New library description",
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "New library name",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "public": {
+            "description": "Whether the library is publicly visible",
+            "type": "boolean"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_edit",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "library": {
+            "additionalProperties": false,
+            "properties": {
+              "date_last_modified": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "num_documents": {
+                "type": "number"
+              },
+              "owner": {
+                "type": "string"
+              },
+              "permission": {
+                "type": "string"
+              },
+              "public": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "updated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "library",
+          "updated"
+        ],
+        "type": "object"
+      },
+      "title": "Edit SciX library"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Permanently delete a SciX library and its notes. Cannot be undone. Clients that support elicitation are asked to confirm first.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_delete",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "library_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "title": "Delete SciX library"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
       "description": "Add or remove papers from a SciX library. Pass bibcodes and \"add\" or \"remove\".",
       "icons": [
         {
@@ -1769,6 +1937,437 @@
         "type": "object"
       },
       "title": "Add or remove library papers"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Run a SciX search query and add its top results (up to \"rows\") to a library. Falls back to search-then-add when the query endpoint is unavailable.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "query": {
+            "description": "SciX search query; its top results are added to the library",
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "default": 25,
+            "description": "How many results to add (default 25)",
+            "maximum": 2000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "library_id",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_add_by_query",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "type": "number"
+          },
+          "found": {
+            "type": "number"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "requested": {
+            "type": "number"
+          },
+          "via": {
+            "enum": [
+              "query_endpoint",
+              "search_fallback"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "query",
+          "requested",
+          "found",
+          "added",
+          "via"
+        ],
+        "type": "object"
+      },
+      "title": "Add search results to library"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Combine libraries (union, intersection, difference), copy a library, or empty it. \"empty\" removes every paper from the target library.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "description": {
+            "description": "Description of the new library (copy only)",
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "library_id": {
+            "description": "Target library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the new library (copy only)",
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
+          "operation": {
+            "description": "union/intersection/difference combine the target with source_library_ids; copy duplicates the target into a new library; empty removes every paper from the target",
+            "enum": [
+              "union",
+              "intersection",
+              "difference",
+              "copy",
+              "empty"
+            ],
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "source_library_ids": {
+            "description": "Other libraries to combine with the target (required for union, intersection, difference)",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          }
+        },
+        "required": [
+          "library_id",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_operation",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "documents_affected": {
+            "type": "number"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "new_library_id": {
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "union",
+              "intersection",
+              "difference",
+              "copy",
+              "empty"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "title": "Library set operation"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "List who owns a SciX library and which collaborators have which permissions.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_get_permissions",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "collaborators": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "permissions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "email",
+                "permissions"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "collaborators"
+        ],
+        "type": "object"
+      },
+      "title": "Get library permissions"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Grant or change a collaborator's permission (owner, admin, write, read) on a SciX library.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "description": "Email of the user whose access changes",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "permission": {
+            "description": "Permission level to grant",
+            "enum": [
+              "owner",
+              "admin",
+              "write",
+              "read"
+            ],
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "email",
+          "permission"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_update_permissions",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "email",
+          "permission"
+        ],
+        "type": "object"
+      },
+      "title": "Update library permissions"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Transfer ownership of a SciX library to another user. You lose ownership. Clients that support elicitation are asked to confirm first.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "email": {
+            "description": "Email of the new owner",
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "type": "string"
+          },
+          "library_id": {
+            "description": "Library identifier",
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "library_id",
+          "email"
+        ],
+        "type": "object"
+      },
+      "name": "scix_library_transfer",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "transferred": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "library_id",
+          "email",
+          "transferred"
+        ],
+        "type": "object"
+      },
+      "title": "Transfer library ownership"
     },
     {
       "annotations": {
@@ -2974,6 +3573,149 @@
         "type": "object"
       },
       "title": "arXiv citation graph"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Report server and SDK versions, the MCP protocol in use, whether a SciX token is configured (never its value), an ADS reachability probe, cache/state directory status and the tool count. Makes no arXiv request.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "health_check",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "ads_probe": {
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "reset_at": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "ok",
+                  "unauthorized",
+                  "rate_limited",
+                  "unreachable",
+                  "skipped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "cache_dir": {
+            "additionalProperties": false,
+            "properties": {
+              "exists": {
+                "type": "boolean"
+              },
+              "path": {
+                "type": "string"
+              },
+              "writable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "path",
+              "exists",
+              "writable"
+            ],
+            "type": "object"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "scix_token_configured": {
+            "type": "boolean"
+          },
+          "server": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sdk_version": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "sdk_version"
+            ],
+            "type": "object"
+          },
+          "state_dir": {
+            "additionalProperties": false,
+            "properties": {
+              "exists": {
+                "type": "boolean"
+              },
+              "path": {
+                "type": "string"
+              },
+              "writable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "path",
+              "exists",
+              "writable"
+            ],
+            "type": "object"
+          },
+          "tool_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "server",
+          "protocol",
+          "scix_token_configured",
+          "ads_probe",
+          "cache_dir",
+          "state_dir",
+          "tool_count"
+        ],
+        "type": "object"
+      },
+      "title": "Server health check"
     }
   ]
 }

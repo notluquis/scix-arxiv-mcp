@@ -1,4 +1,4 @@
-import type { CallToolResult, Icon, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
+import type { CallToolResult, Icon, InputRequiredResult, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 export const UNTRUSTED_BANNER =
@@ -62,20 +62,30 @@ export interface ToolSpec<S extends z.ZodObject> {
   _meta?: Record<string, unknown>;
 }
 
+const toolCounts = new WeakMap<McpServer, number>();
+
+/** How many tools {@link addTool} has registered on this server (health_check reports it). */
+export function registeredToolCount(server: McpServer): number {
+  return toolCounts.get(server) ?? 0;
+}
+
 /**
- * Registers a tool whose handler returns {@link ToolOut}. Thrown errors become `isError`
- * results; `response_format: 'json'` swaps the text for the structured result.
+ * Registers a tool whose handler returns {@link ToolOut}, or an `input_required` result
+ * (multi-round-trip elicitation), which is passed through untouched. Thrown errors become
+ * `isError` results; `response_format: 'json'` swaps the text for the structured result.
  */
 export function addTool<S extends z.ZodObject>(
   server: McpServer,
   name: string,
   spec: ToolSpec<S>,
-  run: (args: z.infer<S>, ctx: ServerContext) => Promise<ToolOut>
+  run: (args: z.infer<S>, ctx: ServerContext) => Promise<ToolOut | InputRequiredResult>
 ): void {
+  toolCounts.set(server, registeredToolCount(server) + 1);
   // The generic S is erased here: the SDK validates `args` against spec.inputSchema before calling us.
   server.registerTool(name, spec as ToolSpec<z.ZodObject>, async (args: Record<string, unknown>, ctx: ServerContext) => {
     try {
       const out = await run(args as z.infer<S>, ctx);
+      if ('resultType' in out) return out;
       return toolResult({ ...out, format: args['response_format'] as ResponseFormat | undefined });
     } catch (e) {
       return errorResult(e instanceof Error ? e.message : String(e));
@@ -130,4 +140,7 @@ export const CREATE_REMOTE: ToolAnnotations = {
 };
 export const MUTATE_REMOTE_IDEMPOTENT: ToolAnnotations = {
   readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true,
+};
+export const DESTRUCTIVE_REMOTE: ToolAnnotations = {
+  readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true,
 };

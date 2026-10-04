@@ -6,6 +6,14 @@ export interface WriteOptions {
   idempotent?: boolean;
 }
 
+/** A non-2xx ADS response. The message keeps the historical `SciX API error <status>: <body>` form. */
+export class ScixApiError extends Error {
+  constructor(readonly status: number, readonly body: string) {
+    super(`SciX API error ${status}: ${body}`);
+    this.name = 'ScixApiError';
+  }
+}
+
 export class ScixClient {
   private readonly apiKey: string;
 
@@ -72,7 +80,7 @@ export class ScixClient {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`SciX API error ${res.status}: ${text}`);
+      throw new ScixApiError(res.status, text);
     }
     return res;
   }

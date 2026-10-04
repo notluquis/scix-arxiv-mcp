@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { registerArxivTools } from './tools/arxiv.js';
 import { registerScixLibraryTools } from './tools/scix_libraries.js';
 import { registerScixAuthorTools } from './tools/scix_authors.js';
+import { registerHealthTool } from './tools/health.js';
 import { registerScixDocsTool, registerScixTools } from './tools/scix.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
@@ -14,12 +15,13 @@ export function buildServer(): McpServer {
   const server = new McpServer({ name: 'scix-arxiv-mcp', version: pkg.version });
 
   // Registration order is the tools/list order (locked by test/contract.json):
-  // SciX/ADS tools (core, authors/objects, docs), then SciX libraries, then arXiv.
+  // SciX/ADS tools (core, authors/objects, docs), then SciX libraries, then arXiv, then health_check.
   registerScixTools(server);
   registerScixAuthorTools(server);
   registerScixDocsTool(server);
   registerScixLibraryTools(server);
   registerArxivTools(server);
+  registerHealthTool(server);
 
   // ── Prompts ────────────────────────────────────────────────────────────
 
