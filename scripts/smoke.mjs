@@ -2,7 +2,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
-const EXPECTED_TOOLS = 16;
+const EXPECTED_TOOLS = 19;
 const EXPECTED_PROMPTS = 6;
 
 const client = new Client(

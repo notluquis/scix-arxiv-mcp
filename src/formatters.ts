@@ -95,7 +95,7 @@ export function formatArxivList(papers: ArxivPaper[]): string {
   return result;
 }
 
-function formatPaginationNote(page: Page): string {
+export function formatPaginationNote(page: Page): string {
   const end = page.offset + page.slice.length;
   const range = `_Showing characters ${page.offset}-${end} of ${page.total_chars}._`;
   if (page.next_offset === null) return `\n\n${range}`;

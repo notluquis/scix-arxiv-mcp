@@ -4,7 +4,12 @@ import { gunzipSync } from 'node:zlib';
 import { cached, TTL_UNVERSIONED_MS, TTL_VERSIONED_MS } from '../cache.js';
 import { ARXIV_API_URL } from '../config.js';
 import { fetchWithPolicy } from '../http.js';
+import {
+  extractHtmlText, htmlToText, normalizeText, parseSections, textToSections, type PaperSection,
+} from './arxiv_html.js';
 import { arxivIdWithVersion, normalizeArxivId, type ArxivId } from '../ids.js';
+
+export { extractHtmlText };
 
 export interface ArxivPaper {
   id: string;
@@ -167,7 +172,7 @@ async function fetchAtom(url: string): Promise<ArxivPaper[]> {
 
 const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
-async function fetchPdfText(url: string): Promise<string> {
+export async function fetchPdfText(url: string): Promise<string> {
   const res = await fetchWithPolicy(url, {}, { maxBytes: MAX_DOWNLOAD_BYTES });
   if (!res.ok) throw new Error(`arXiv PDF fetch error ${res.status}`);
 
@@ -193,47 +198,6 @@ export async function arxivGetPaper(paperId: string): Promise<ArxivPaper | null>
   const url = `${ARXIV_API_URL}?id_list=${base}&max_results=1`;
   const papers = await fetchAtom(url);
   return papers[0] ?? null;
-}
-
-function decodeHtmlEntities(text: string): string {
-  const namedEntities: Record<string, string> = {
-    amp: '&',
-    lt: '<',
-    gt: '>',
-    quot: '"',
-    apos: "'",
-    nbsp: ' ',
-  };
-
-  return text
-    .replace(/&#(x?[0-9a-fA-F]+);/g, (match, value: string) => {
-      const codePoint = value.startsWith('x') || value.startsWith('X')
-        ? Number.parseInt(value.slice(1), 16)
-        : Number.parseInt(value, 10);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
-    })
-    .replace(/&([a-zA-Z]+);/g, (match, entity: string) => namedEntities[entity] ?? match);
-}
-
-function normalizeText(text: string): string {
-  return text
-    .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-export function extractHtmlText(html: string): string {
-  const stripped = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<!--([\s\S]*?)-->/g, ' ')
-    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
-    .replace(/<\/(p|div|li|section|article|header|footer|main|aside|nav|figure|figcaption|blockquote|h[1-6]|tr|td|th|table|ul|ol|pre|dd|dt)\s*>/gi, '\n\n')
-    .replace(/<\s*(p|div|li|section|article|header|footer|main|aside|nav|figure|figcaption|blockquote|h[1-6]|tr|td|th|table|ul|ol|pre|dd|dt)[^>]*>/gi, '')
-    .replace(/<[^>]+>/g, ' ');
-
-  return normalizeText(decodeHtmlEntities(stripped)).replace(/\n{3,}/g, '\n\n');
 }
 
 function stripLatexCommands(text: string): string {
@@ -340,15 +304,20 @@ function looksLikeFullPaperText(text: string, abstract = ''): boolean {
   return text.length >= minLength || paragraphCount >= 8 || /\b(introduction|related work|method|results|discussion|conclusion|references)\b/.test(compact);
 }
 
-async function fetchHtmlPaper(urlId: string): Promise<string | null> {
+const MAX_HTML_BYTES = 50 * 1024 * 1024;
+
+/** The page body, or null for any non-2xx or network failure (callers fall back to another source). */
+async function fetchHtmlPage(url: string): Promise<string | null> {
   try {
-    const res = await fetchWithPolicy(`https://arxiv.org/html/${urlId}`);
+    const res = await fetchWithPolicy(url, {}, { maxBytes: MAX_HTML_BYTES });
     if (!res.ok) return null;
     return await res.text();
   } catch {
     return null;
   }
 }
+
+const fetchHtmlPaper = (urlId: string) => fetchHtmlPage(`https://arxiv.org/html/${urlId}`);
 
 async function fetchSourceArchive(urlId: string): Promise<Buffer | null> {
   try {
@@ -370,6 +339,10 @@ function makeReadResult(
   return { paper, source, content, sourceName, version };
 }
 
+/** Progress callback; see `progress()` in content.ts. Never rejects. */
+export type StepFn = (message: string) => Promise<void>;
+const noStep: StepFn = async () => undefined;
+
 export type ArxivReadRequest = 'auto' | 'html' | 'latex' | 'pdf';
 
 /**
@@ -378,10 +351,12 @@ export type ArxivReadRequest = 'auto' | 'html' | 'latex' | 'pdf';
  */
 export async function arxivReadPaper(
   paperId: string,
-  source: ArxivReadRequest = 'auto'
+  source: ArxivReadRequest = 'auto',
+  step: StepFn = noStep
 ): Promise<ArxivReadPaperResult> {
   const id: ArxivId = normalizeArxivId(paperId);
   const urlId = arxivIdWithVersion(id);
+  await step('Fetching paper metadata');
   const paper = await arxivGetPaper(id.base);
   if (!paper) {
     return { paper: null, content: '', source: 'unavailable' };
@@ -390,9 +365,10 @@ export async function arxivReadPaper(
   const ttl = version ? TTL_VERSIONED_MS : TTL_UNVERSIONED_MS;
 
   if (source === 'auto' || source === 'html') {
-    const htmlText = await cached('html', urlId, ttl, async () => {
+    await step('Fetching arXiv HTML');
+    const htmlText = await cached('html-tex', urlId, ttl, async () => {
       const html = await fetchHtmlPaper(urlId);
-      return html ? extractHtmlText(html) : null;
+      return html ? htmlToText(html) : null;
     });
     if (htmlText !== null) {
       if (source === 'html' ? htmlText : looksLikeFullPaperText(htmlText, paper.abstract)) {
@@ -403,6 +379,7 @@ export async function arxivReadPaper(
   }
 
   if (source === 'auto' || source === 'latex') {
+    await step('Fetching LaTeX source');
     const texResult = await cached('latex', urlId, ttl, async () => {
       const archive = await fetchSourceArchive(urlId);
       return archive ? extractTexText(archive) : null;
@@ -414,6 +391,7 @@ export async function arxivReadPaper(
   }
 
   if (source === 'auto' || source === 'pdf') {
+    await step('Extracting PDF text');
     const pdfText = await cached('pdf', urlId, ttl, () => fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`));
     if (pdfText) {
       return makeReadResult(paper, 'pdf', pdfText, version);
@@ -422,4 +400,45 @@ export async function arxivReadPaper(
   }
 
   return makeReadResult(paper, 'abstract', paper.abstract, version);
+}
+
+export interface SectionedPaper {
+  source: 'html' | 'ar5iv' | 'pdf';
+  sections: PaperSection[];
+}
+
+/**
+ * A paper split into sections. Sources, in order: arxiv.org/html, ar5iv, then PDF text with
+ * heading heuristics. The flattened result is cached; a hit skips the fetch steps.
+ * (LaTeX sections join this chain in Step 6.)
+ */
+export async function arxivSectionedPaper(
+  paperId: string,
+  step: StepFn = noStep
+): Promise<{ paper: ArxivPaper; arxivId: string; version?: string; sectioned: SectionedPaper } | null> {
+  const id: ArxivId = normalizeArxivId(paperId);
+  const urlId = arxivIdWithVersion(id);
+  await step('Fetching paper metadata');
+  const paper = await arxivGetPaper(id.base);
+  if (!paper) return null;
+  const ttl = id.version ? TTL_VERSIONED_MS : TTL_UNVERSIONED_MS;
+
+  const sectioned = await cached<SectionedPaper>('sections', urlId, ttl, async () => {
+    await step('Fetching arXiv HTML');
+    const html = await fetchHtmlPaper(urlId);
+    const fromHtml = html ? parseSections(html) : [];
+    if (fromHtml.length > 0) return { source: 'html', sections: fromHtml };
+
+    await step('Falling back to ar5iv');
+    const ar5iv = await fetchHtmlPage(`https://ar5iv.labs.arxiv.org/html/${urlId}`);
+    const fromAr5iv = ar5iv ? parseSections(ar5iv) : [];
+    if (fromAr5iv.length > 0) return { source: 'ar5iv', sections: fromAr5iv };
+
+    await step('Extracting PDF text');
+    const text = await fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`);
+    const fromPdf = textToSections(text);
+    if (fromPdf.length === 0) throw new Error(`No section structure or text could be obtained for ${urlId}.`);
+    return { source: 'pdf', sections: fromPdf };
+  });
+  return { paper, arxivId: paper.id, version: id.version, sectioned };
 }

@@ -1,4 +1,4 @@
-import type { CallToolResult, Icon, McpServer, ToolAnnotations } from '@modelcontextprotocol/server';
+import type { CallToolResult, Icon, McpServer, ServerContext, ToolAnnotations } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 export const UNTRUSTED_BANNER =
@@ -70,17 +70,52 @@ export function addTool<S extends z.ZodObject>(
   server: McpServer,
   name: string,
   spec: ToolSpec<S>,
-  run: (args: z.infer<S>) => Promise<ToolOut>
+  run: (args: z.infer<S>, ctx: ServerContext) => Promise<ToolOut>
 ): void {
   // The generic S is erased here: the SDK validates `args` against spec.inputSchema before calling us.
-  server.registerTool(name, spec as ToolSpec<z.ZodObject>, async (args: Record<string, unknown>) => {
+  server.registerTool(name, spec as ToolSpec<z.ZodObject>, async (args: Record<string, unknown>, ctx: ServerContext) => {
     try {
-      const out = await run(args as z.infer<S>);
+      const out = await run(args as z.infer<S>, ctx);
       return toolResult({ ...out, format: args['response_format'] as ResponseFormat | undefined });
     } catch (e) {
       return errorResult(e instanceof Error ? e.message : String(e));
     }
   });
+}
+
+// ── Progress ─────────────────────────────────────────────────────────────────
+
+export type Step = (message: string) => Promise<void>;
+
+/** The slice of ServerContext that progress reporting needs. */
+export interface ProgressContext {
+  mcpReq: {
+    _meta?: { progressToken?: string | number };
+    notify: (notification: { method: 'notifications/progress'; params: Record<string, unknown> }) => Promise<void>;
+  };
+}
+
+/**
+ * `step(message)` sends `notifications/progress` with a counter that strictly increases (1, 2, 3…),
+ * as the spec requires. A no-op when the request carried no `_meta.progressToken`. `total` is the
+ * pipeline's step count; it grows if a pipeline takes more steps than announced, so progress never
+ * exceeds it. Progress is best-effort: a failed notification never fails the tool.
+ */
+export function progress(ctx: ProgressContext | undefined, total: number): Step {
+  const token = ctx?.mcpReq._meta?.progressToken;
+  if (token === undefined || !ctx) return async () => undefined;
+  let count = 0;
+  return async message => {
+    count += 1;
+    try {
+      await ctx.mcpReq.notify({
+        method: 'notifications/progress',
+        params: { progressToken: token, progress: count, total: Math.max(total, count), message },
+      });
+    } catch {
+      // best-effort
+    }
+  };
 }
 
 // ── Output-schema fragments shared by several tools ──────────────────────────

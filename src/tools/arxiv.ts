@@ -6,10 +6,11 @@ import { fetchWithPolicy } from '../http.js';
 import {
   formatArxivList, formatArxivPaper, formatArxivReadPaper,
 } from '../formatters.js';
+import { registerArxivSectionTools } from './arxiv_sections.js';
 import { ARXIV_ICONS } from '../icons.js';
 import { normalizeArxivId } from '../ids.js';
 import {
-  READ_EXTERNAL, addTool, notFound, paginate, responseFormat, type ToolOut,
+  READ_EXTERNAL, addTool, notFound, paginate, progress, responseFormat, type Step, type ToolOut,
 } from '../content.js';
 
 type In<S extends z.ZodType> = Omit<z.infer<S>, 'response_format'>;
@@ -137,8 +138,11 @@ export const arxivReadPaperSchema = z.object({
   ),
 });
 
-export async function handleArxivReadPaper(input: z.infer<typeof arxivReadPaperSchema>): Promise<ToolOut> {
-  const result = await arxivReadPaper(input.paper_id, input.source);
+export async function handleArxivReadPaper(
+  input: z.infer<typeof arxivReadPaperSchema>,
+  step?: Step
+): Promise<ToolOut> {
+  const result = await arxivReadPaper(input.paper_id, input.source, step);
   if (!result.paper) return notFound(`No paper found with ID: ${input.paper_id}`);
 
   const page = paginate(result.content.trim(), input.offset, input.max_chars);
@@ -398,7 +402,9 @@ export function registerArxivTools(server: McpServer): void {
     annotations: READ_EXTERNAL,
     icons: ARXIV_ICONS,
     _meta: { 'anthropic/maxResultSizeChars': 200000 },
-  }, input => handleArxivReadPaper(input));
+  }, (input, ctx) => handleArxivReadPaper(input, progress(ctx, 4)));
+
+  registerArxivSectionTools(server);
 
   addTool(server, 'arxiv_citation_graph', {
     title: 'arXiv citation graph',
