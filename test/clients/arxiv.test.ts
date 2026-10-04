@@ -42,7 +42,7 @@ describe('arxivSearch', () => {
     await arxivSearch('ti:transformers', { maxResults: 5, sortBy: 'submittedDate', sortOrder: 'ascending' });
 
     const [url] = mock.mock.calls[0];
-    expect(url).toContain('search_query=ti%3Atransformers');
+    expect(url).toContain('search_query=(ti%3Atransformers)');
     expect(url).toContain('max_results=5');
     expect(url).toContain('sortBy=submittedDate');
     expect(url).toContain('sortOrder=ascending');

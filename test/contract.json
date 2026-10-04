@@ -2472,7 +2472,7 @@
         "openWorldHint": true,
         "readOnlyHint": true
       },
-      "description": "Search arXiv preprint server across all scientific disciplines. Supports field prefixes (ti:, au:, abs:, cat:), date ranges, and category filters.",
+      "description": "Search arXiv preprint server across all scientific disciplines. Plain words are ANDed (all:w1 AND all:w2); use all:\"exact phrase\" for an exact phrase. Supports field prefixes (ti:, au:, abs:, cat:, all:), date ranges, and category filters.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -3581,7 +3581,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Save or update a standing arXiv query. A new watch starts at the current time, so the first check does not dump history. Re-watching the same topic string updates it; omit categories to keep them, [] clears them.",
+      "description": "Save or update a standing arXiv query (plain words are ANDed; use all:\"phrase\" for exact phrases). A new watch starts at the current time, so the first check does not dump history. Re-watching the same topic string updates it; omit categories to keep them, [] clears them.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -3617,7 +3617,7 @@
             "type": "string"
           },
           "topic": {
-            "description": "arXiv query to watch, same syntax as arxiv_search (field prefixes ti:/au:/abs:, quoted phrases, AND/OR/ANDNOT). Watching an existing topic string updates that watch.",
+            "description": "arXiv query to watch, same syntax as arxiv_search: plain words are ANDed, use all:\"phrase\" for an exact phrase; field prefixes ti:/au:/abs:, AND/OR/ANDNOT. Watching an existing topic string updates that watch.",
             "maxLength": 500,
             "minLength": 1,
             "type": "string"

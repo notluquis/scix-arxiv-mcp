@@ -365,7 +365,8 @@ export function registerArxivTools(server: McpServer): void {
     title: 'Search arXiv',
     description:
       'Search arXiv preprint server across all scientific disciplines. ' +
-      'Supports field prefixes (ti:, au:, abs:, cat:), date ranges, and category filters.',
+      'Plain words are ANDed (all:w1 AND all:w2); use all:"exact phrase" for an exact phrase. ' +
+      'Supports field prefixes (ti:, au:, abs:, cat:, all:), date ranges, and category filters.',
     inputSchema: arxivSearchSchema,
     outputSchema: z.object({ total: z.number(), start: z.number(), items: z.array(arxivItemOut) }),
     annotations: READ_EXTERNAL,

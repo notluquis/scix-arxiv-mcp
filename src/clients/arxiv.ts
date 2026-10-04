@@ -114,16 +114,30 @@ export function toArxivDate(date: string, edge: 'start' | 'end'): string {
   return `${ymd}${edge === 'start' ? '0000' : '2359'}`;
 }
 
+const ARXIV_SYNTAX = /["()]|\b(?:AND|OR|ANDNOT)\b|\b(?:ti|au|abs|co|jr|cat|rn|id|all|submittedDate|lastUpdatedDate):/;
+
+/**
+ * arXiv treats bare terms as OR (measured: `eclipsing binary` 54 hits vs 7 for the AND). A plain
+ * natural-language query becomes `all:w1 AND all:w2`; anything using arXiv syntax passes through.
+ */
+export function normalizeArxivQuery(query: string): string {
+  const q = query.trim();
+  if (ARXIV_SYNTAX.test(q)) return q;
+  const terms = q.split(/\s+/).map(t => t.replace(/[^\p{L}\p{N}_.+\-]/gu, '')).filter(Boolean);
+  return terms.length ? terms.map(t => `all:${t}`).join(' AND ') : q;
+}
+
 /**
  * Build the full arXiv API query string, appending date and category filters
  * without letting URLSearchParams double-encode the `[` `]` `*` `+TO+` tokens
  * that the arXiv Atom API expects.
  */
-function buildArxivUrl(
+export function buildArxivUrl(
   query: string,
   opts: ArxivSearchOptions
 ): string {
-  const parts: string[] = [query];
+  // Parenthesized so a user `a OR b` cannot swallow the AND-ed date/category filters.
+  const parts: string[] = [`(${normalizeArxivQuery(query)})`];
 
   if (opts.submittedFrom && opts.submittedTo) {
     parts.push(`submittedDate:[${opts.submittedFrom} TO ${opts.submittedTo}]`);
@@ -145,8 +159,8 @@ function buildArxivUrl(
   // needs them literal in the query string. Build manually instead.
   const encoded = encodeURIComponent(fullQuery)
     .replace(/%5B/g, '[').replace(/%5D/g, ']')
-    .replace(/%2A/g, '*').replace(/%20/g, '+')
-    .replace(/%2B/g, '+');
+    .replace(/%2A/g, '*').replace(/%20/g, '+');
+  // A literal '+' stays %2B: turning it into '+' would make arXiv read it as a space.
 
   const sortBy = opts.sortBy ?? 'relevance';
   const sortOrder = opts.sortOrder ?? 'descending';

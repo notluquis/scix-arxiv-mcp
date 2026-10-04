@@ -106,7 +106,8 @@ const withWarning = (text: string, warning?: string) => (warning ? `${text}\n\n_
 
 export const arxivWatchTopicSchema = z.object({
   topic: z.string().min(1).max(500).describe(
-    'arXiv query to watch, same syntax as arxiv_search (field prefixes ti:/au:/abs:, quoted phrases, AND/OR/ANDNOT). ' +
+    'arXiv query to watch, same syntax as arxiv_search: plain words are ANDed, use all:"phrase" for an exact phrase; ' +
+    'field prefixes ti:/au:/abs:, AND/OR/ANDNOT. ' +
     'Watching an existing topic string updates that watch.'
   ),
   categories: z.array(z.string()).optional().describe(
@@ -306,7 +307,7 @@ const warningField = { warning: z.string().optional() };
 export function registerAlertTools(server: McpServer): void {
   addTool(server, 'arxiv_watch_topic', {
     title: 'Watch an arXiv topic',
-    description: 'Save or update a standing arXiv query. A new watch starts at the current time, so the first check ' +
+    description: 'Save or update a standing arXiv query (plain words are ANDed; use all:"phrase" for exact phrases). A new watch starts at the current time, so the first check ' +
       'does not dump history. Re-watching the same topic string updates it; omit categories to keep them, [] clears them.',
     inputSchema: arxivWatchTopicSchema,
     outputSchema: z.object({ created: z.boolean(), watch: watchOut, ...warningField }),
