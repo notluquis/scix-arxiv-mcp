@@ -73,4 +73,22 @@ describe('ScixClient', () => {
 
     await expect(client.get('search/query')).rejects.toThrow('Connection refused');
   });
+
+  it('POST 503 is not retried by default (mutations are not idempotent)', async () => {
+    const mock = mockFetch({ status: 503, text: 'busy' });
+    await expect(new ScixClient().post('biblib/libraries', { name: 'x' })).rejects.toThrow('503');
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST 503 is retried when the caller marks it idempotent', async () => {
+    const mock = mockFetch({ status: 503, text: 'busy' });
+    await expect(new ScixClient().post('search/bigquery', {}, { idempotent: true })).rejects.toThrow('503');
+    expect(mock).toHaveBeenCalledTimes(4);
+  });
+
+  it('GET 503 is retried', async () => {
+    const mock = mockFetch({ status: 503, text: 'busy' });
+    await expect(new ScixClient().get('search/query')).rejects.toThrow('503');
+    expect(mock).toHaveBeenCalledTimes(4);
+  });
 });

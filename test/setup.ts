@@ -7,3 +7,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scix-arxiv-test-'));
 process.env.XDG_CACHE_HOME = dir;
 process.env.XDG_STATE_HOME = dir;
 process.env.SCIX_ARXIV_RATE_SCALE = '0';
+
+// Cache is on disk and shared by every test in a file; start each test cold.
+import { beforeEach } from 'vitest';
+beforeEach(() => fs.rmSync(path.join(dir, 'scix-arxiv-mcp'), { recursive: true, force: true }));

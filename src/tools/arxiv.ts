@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { arxivGetPaper, arxivReadPaper, arxivSearch } from '../clients/arxiv.js';
-import { REQUEST_TIMEOUT } from '../config.js';
+import { cached, TTL_S2_MS } from '../cache.js';
+import { fetchWithPolicy } from '../http.js';
 import {
   formatArxivList, formatArxivPaper, formatArxivReadPaper,
 } from '../formatters.js';
@@ -263,6 +264,8 @@ function formatPaperList(papers: SemanticScholarPaperRef[], heading: string): st
   return output;
 }
 
+class S2Error extends Error {}
+
 export async function handleArxivCitationGraph(
   input: ArxivCitationGraphInput
 ): Promise<ArxivCitationGraphResult> {
@@ -285,57 +288,59 @@ export async function handleArxivCitationGraph(
   ].join(',');
   const url = `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(`ARXIV:${paperId}`)}?fields=${encodeURIComponent(fields)}`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
+  let paper: SemanticScholarPaper;
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      const message = `Could not retrieve citation graph for ${paperId}: Semantic Scholar API error ${res.status}${text ? `: ${text}` : ''}`;
-      return {
-        text: message,
-        structured: { status: 'error', paper_id: paperId, message },
-        isError: true,
-      };
-    }
-
-    const paper = await res.json() as SemanticScholarPaper;
-    const citations = paper.citations ?? [];
-    const references = paper.references ?? [];
-    const structuredCitations = citations.map(normalizePaper);
-    const structuredReferences = references.map(normalizePaper);
-
-    let output = `# Citation Graph for arXiv:${paperId}\n\n`;
-    output += `**Title:** ${paper.title ?? 'Untitled'}\n\n`;
-    if (paper.year) output += `**Year:** ${paper.year}\n\n`;
-    output += `**Citations returned:** ${citations.length}\n\n`;
-    output += `**References returned:** ${references.length}\n\n`;
-    output += formatPaperList(citations, 'Citing papers');
-    output += formatPaperList(references, 'Referenced papers');
-
+    paper = await cached('s2', paperId, TTL_S2_MS, async () => {
+      const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim();
+      const res = await fetchWithPolicy(url, apiKey ? { headers: { 'x-api-key': apiKey } } : {});
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new S2Error(`Semantic Scholar API error ${res.status}${text ? `: ${text}` : ''}`);
+      }
+      return await res.json() as SemanticScholarPaper;
+    });
+  } catch (e) {
+    if (!(e instanceof S2Error)) throw e;
+    const message = `Could not retrieve citation graph for ${paperId}: ${e.message}`;
     return {
-      text: output,
-      structured: {
-        status: 'success',
-        paper_id: paperId,
-        paper: {
-          paper_id: paper.paperId,
-          arxiv_id: paperId,
-          title: paper.title,
-          year: paper.year,
-          authors: paper.authors?.map(author => author.name).filter((name): name is string => Boolean(name)) ?? [],
-          external_ids: paper.externalIds ?? {},
-        },
-        citation_count: citations.length,
-        reference_count: references.length,
-        citations: structuredCitations,
-        references: structuredReferences,
-      },
+      text: message,
+      structured: { status: 'error', paper_id: paperId, message },
+      isError: true,
     };
-  } finally {
-    clearTimeout(timer);
   }
+
+  const citations = paper.citations ?? [];
+  const references = paper.references ?? [];
+  const structuredCitations = citations.map(normalizePaper);
+  const structuredReferences = references.map(normalizePaper);
+
+  let output = `# Citation Graph for arXiv:${paperId}\n\n`;
+  output += `**Title:** ${paper.title ?? 'Untitled'}\n\n`;
+  if (paper.year) output += `**Year:** ${paper.year}\n\n`;
+  output += `**Citations returned:** ${citations.length}\n\n`;
+  output += `**References returned:** ${references.length}\n\n`;
+  output += formatPaperList(citations, 'Citing papers');
+  output += formatPaperList(references, 'Referenced papers');
+
+  return {
+    text: output,
+    structured: {
+      status: 'success',
+      paper_id: paperId,
+      paper: {
+        paper_id: paper.paperId,
+        arxiv_id: paperId,
+        title: paper.title,
+        year: paper.year,
+        authors: paper.authors?.map(author => author.name).filter((name): name is string => Boolean(name)) ?? [],
+        external_ids: paper.externalIds ?? {},
+      },
+      citation_count: citations.length,
+      reference_count: references.length,
+      citations: structuredCitations,
+      references: structuredReferences,
+    },
+  };
 }
 
 

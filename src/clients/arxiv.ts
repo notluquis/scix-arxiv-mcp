@@ -1,7 +1,9 @@
 import { PDFParse } from 'pdf-parse';
 import { gunzipSync } from 'node:zlib';
 
-import { ARXIV_API_URL, REQUEST_TIMEOUT } from '../config.js';
+import { cached, TTL_UNVERSIONED_MS, TTL_VERSIONED_MS } from '../cache.js';
+import { ARXIV_API_URL } from '../config.js';
+import { fetchWithPolicy } from '../http.js';
 import { arxivIdWithVersion, normalizeArxivId, type ArxivId } from '../ids.js';
 
 export interface ArxivPaper {
@@ -157,36 +159,25 @@ function buildArxivUrl(
 }
 
 async function fetchAtom(url: string): Promise<ArxivPaper[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`arXiv API error ${res.status}`);
-    return parseAtomFeed(await res.text());
-  } finally {
-    clearTimeout(timer);
-  }
+  // Atom metadata is deliberately not cached.
+  const res = await fetchWithPolicy(url);
+  if (!res.ok) throw new Error(`arXiv API error ${res.status}`);
+  return parseAtomFeed(await res.text());
 }
 
+const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+
 async function fetchPdfText(url: string): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const res = await fetchWithPolicy(url, {}, { maxBytes: MAX_DOWNLOAD_BYTES });
+  if (!res.ok) throw new Error(`arXiv PDF fetch error ${res.status}`);
+
+  const pdf = new PDFParse({ data: new Uint8Array(await res.arrayBuffer()) });
 
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`arXiv PDF fetch error ${res.status}`);
-
-    const pdf = new PDFParse({ data: new Uint8Array(await res.arrayBuffer()) });
-
-    try {
-      const textResult = await pdf.getText({ lineEnforce: true });
-      return textResult.text.trim();
-    } finally {
-      await pdf.destroy();
-    }
+    const textResult = await pdf.getText({ lineEnforce: true });
+    return textResult.text.trim();
   } finally {
-    clearTimeout(timer);
+    await pdf.destroy();
   }
 }
 
@@ -350,33 +341,22 @@ function looksLikeFullPaperText(text: string, abstract = ''): boolean {
 }
 
 async function fetchHtmlPaper(urlId: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
   try {
-    const res = await fetch(`https://arxiv.org/html/${urlId}`, { signal: controller.signal });
+    const res = await fetchWithPolicy(`https://arxiv.org/html/${urlId}`);
     if (!res.ok) return null;
     return await res.text();
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 async function fetchSourceArchive(urlId: string): Promise<Buffer | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-
   try {
-    const res = await fetch(`https://arxiv.org/e-print/${urlId}`, { signal: controller.signal });
+    const res = await fetchWithPolicy(`https://arxiv.org/e-print/${urlId}`, {}, { maxBytes: MAX_DOWNLOAD_BYTES });
     if (!res.ok) return null;
-    const bytes = await res.arrayBuffer();
-    return Buffer.from(bytes);
+    return Buffer.from(await res.arrayBuffer());
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -407,11 +387,14 @@ export async function arxivReadPaper(
     return { paper: null, content: '', source: 'unavailable' };
   }
   const { version } = id;
+  const ttl = version ? TTL_VERSIONED_MS : TTL_UNVERSIONED_MS;
 
   if (source === 'auto' || source === 'html') {
-    const html = await fetchHtmlPaper(urlId);
-    if (html) {
-      const htmlText = extractHtmlText(html);
+    const htmlText = await cached('html', urlId, ttl, async () => {
+      const html = await fetchHtmlPaper(urlId);
+      return html ? extractHtmlText(html) : null;
+    });
+    if (htmlText !== null) {
       if (source === 'html' ? htmlText : looksLikeFullPaperText(htmlText, paper.abstract)) {
         return makeReadResult(paper, 'html', htmlText, version);
       }
@@ -420,8 +403,10 @@ export async function arxivReadPaper(
   }
 
   if (source === 'auto' || source === 'latex') {
-    const archive = await fetchSourceArchive(urlId);
-    const texResult = archive ? extractTexText(archive) : null;
+    const texResult = await cached('latex', urlId, ttl, async () => {
+      const archive = await fetchSourceArchive(urlId);
+      return archive ? extractTexText(archive) : null;
+    });
     if (texResult?.text) {
       return makeReadResult(paper, 'latex', texResult.text, version, texResult.sourceName);
     }
@@ -429,7 +414,7 @@ export async function arxivReadPaper(
   }
 
   if (source === 'auto' || source === 'pdf') {
-    const pdfText = await fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`);
+    const pdfText = await cached('pdf', urlId, ttl, () => fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`));
     if (pdfText) {
       return makeReadResult(paper, 'pdf', pdfText, version);
     }
