@@ -386,12 +386,20 @@ export async function handleScixLibraryAddByQuery(
 
 export async function handleScixLibraryOperation(
   client: ScixClient,
-  input: In<typeof scixLibraryOperationSchema>
-): Promise<ToolOut> {
+  input: In<typeof scixLibraryOperationSchema>,
+  ctx?: ServerContext
+): Promise<ToolOut | InputRequiredResult> {
   const id = libraryIdSegment(input.library_id);
   const needsSources = input.operation === 'union' || input.operation === 'intersection' || input.operation === 'difference';
   if (needsSources && !input.source_library_ids?.length) {
     return notFound(`Error: source_library_ids is required for operation="${input.operation}".`);
+  }
+
+  if (input.operation === 'empty') {
+    const gate = await confirmDestructive(client, ctx, id, (name, n) =>
+      `Remove every paper from library ${name}${papersOf(n)}? This cannot be undone.`);
+    if (gate === 'cancelled') return CANCELLED;
+    if (gate !== 'proceed') return gate;
   }
 
   const body: Record<string, unknown> = { action: input.operation };
@@ -587,7 +595,7 @@ export function registerScixLibraryTools(server: McpServer): void {
   addTool(server, 'scix_library_operation', {
     title: 'Library set operation',
     description: 'Combine libraries (union, intersection, difference), copy a library, or empty it. ' +
-      '"empty" removes every paper from the target library.',
+      '"empty" removes every paper from the target library; clients that support elicitation are asked to confirm first.',
     inputSchema: scixLibraryOperationSchema,
     outputSchema: z.object({
       library_id: z.string(), operation: z.enum(['union', 'intersection', 'difference', 'copy', 'empty']),
@@ -595,7 +603,7 @@ export function registerScixLibraryTools(server: McpServer): void {
     }),
     annotations: DESTRUCTIVE_REMOTE,
     icons: SCIX_ICONS,
-  }, input => handleScixLibraryOperation(getScixClient(), input));
+  }, (input, ctx) => handleScixLibraryOperation(getScixClient(), input, ctx));
 
   addTool(server, 'scix_library_get_permissions', {
     title: 'Get library permissions',

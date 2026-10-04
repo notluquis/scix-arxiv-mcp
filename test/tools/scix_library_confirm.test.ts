@@ -144,6 +144,73 @@ describe('scix_library_transfer confirmation (input_required)', () => {
   });
 });
 
+describe('scix_library_operation empty confirmation (input_required)', () => {
+  const args = { library_id: 'abc123', operation: 'empty' };
+  const OP = 'biblib/libraries/operations/abc123';
+
+  it('accept: asks once (naming library and paper count), then sends exactly one operation POST', async () => {
+    const c = await connect({ elicitation: true });
+    const asked: string[] = [];
+    c.client.setRequestHandler(ELICIT, async request => {
+      asked.push((request.params as { message: string }).message);
+      return { action: 'accept', content: { confirm: true } };
+    });
+    try {
+      const calls = mockAds();
+      const result = await c.client.callTool({ name: 'scix_library_operation', arguments: args });
+      expect(result.isError).toBeFalsy();
+      expect(count(calls, 'POST', OP)).toBe(1);
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).toContain('Black Holes (3 papers)');
+    } finally {
+      await c.close();
+    }
+  });
+
+  it('decline, cancel and confirm=false send no operation POST', async () => {
+    for (const answer of [{ action: 'decline' }, { action: 'cancel' }, { action: 'accept', content: { confirm: false } }] as const) {
+      const c = await connect({ elicitation: true });
+      c.client.setRequestHandler(ELICIT, async () => answer);
+      try {
+        const calls = mockAds();
+        const result = await c.client.callTool({ name: 'scix_library_operation', arguments: args });
+        expect(result.isError).toBe(true);
+        expect(text(result)).toContain('Cancelled by user');
+        expect(calls.filter(x => x.method === 'POST')).toHaveLength(0);
+      } finally {
+        await c.close();
+      }
+    }
+  });
+
+  it('a client without the elicitation capability gets exactly one POST and no lookup', async () => {
+    const c = await connect();
+    try {
+      const calls = mockAds();
+      const result = await c.client.callTool({ name: 'scix_library_operation', arguments: args });
+      expect(result.isError).toBeFalsy();
+      expect(calls).toEqual([{ method: 'POST', path: OP }]);
+    } finally {
+      await c.close();
+    }
+  });
+
+  it('non-empty operations (copy) are not gated even with elicitation', async () => {
+    const c = await connect({ elicitation: true });
+    let asked = 0;
+    c.client.setRequestHandler(ELICIT, async () => { asked++; return { action: 'accept', content: { confirm: true } }; });
+    try {
+      const calls = mockAds();
+      const result = await c.client.callTool({ name: 'scix_library_operation', arguments: { library_id: 'abc123', operation: 'copy', name: 'x' } });
+      expect(result.isError).toBeFalsy();
+      expect(asked).toBe(0);
+      expect(calls).toEqual([{ method: 'POST', path: OP }]);
+    } finally {
+      await c.close();
+    }
+  });
+});
+
 describe('library management tools over the real protocol', () => {
   it('response_format json is honoured by get_permissions, and the structured result validates', async () => {
     const c = await connect();

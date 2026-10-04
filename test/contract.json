@@ -2038,7 +2038,7 @@
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Combine libraries (union, intersection, difference), copy a library, or empty it. \"empty\" removes every paper from the target library.",
+      "description": "Combine libraries (union, intersection, difference), copy a library, or empty it. \"empty\" removes every paper from the target library; clients that support elicitation are asked to confirm first.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
