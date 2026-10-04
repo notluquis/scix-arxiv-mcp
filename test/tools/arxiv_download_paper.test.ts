@@ -44,7 +44,7 @@ describe('handleArxivDownloadPaper', () => {
 
     global.fetch = fetchMock as typeof fetch;
 
-    const result = await handleArxivDownloadPaper({ paper_id: '2103.01231' });
+    const result = await handleArxivDownloadPaper({ paper_id: '2103.01231', offset: 0, max_chars: 12_000 });
 
     expect(result).toContain('2103.01231');
     expect(result).toContain('Attention Is All You Need');
@@ -62,7 +62,7 @@ describe('handleArxivDownloadPaper', () => {
 
     global.fetch = fetchMock as typeof fetch;
 
-    const result = await handleArxivDownloadPaper({ paper_id: 'invalid-id' });
+    const result = await handleArxivDownloadPaper({ paper_id: 'invalid-id', offset: 0, max_chars: 12_000 });
 
     expect(result).toContain('Could not download paper');
   });

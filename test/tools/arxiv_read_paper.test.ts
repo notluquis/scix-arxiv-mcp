@@ -76,7 +76,7 @@ describe('handleArxivReadPaper', () => {
 
     global.fetch = fetchMock as typeof fetch;
 
-    const result = await handleArxivReadPaper({ paper_id: '2103.01231' });
+    const result = await handleArxivReadPaper({ paper_id: '2103.01231', offset: 0, max_chars: 12_000 });
 
     expect(result).toContain('Attention Is All You Need');
     expect(result).toContain('**Source:** arXiv HTML');
@@ -112,7 +112,7 @@ Important method details.
 
     global.fetch = fetchMock as typeof fetch;
 
-    const result = await handleArxivReadPaper({ paper_id: '2103.01231' });
+    const result = await handleArxivReadPaper({ paper_id: '2103.01231', offset: 0, max_chars: 12_000 });
 
     expect(result).toContain('**Source:** arXiv source archive');
     expect(result).toContain('main.tex');

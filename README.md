@@ -1,18 +1,8 @@
-# research-remote-mcp
+# scix-arxiv-mcp
 
-Remote MCP server that exposes NASA SciX / ADS and arXiv as tools for Claude (and any other MCP-compatible client that supports remote connectors).
+Local stdio MCP server that exposes NASA SciX / ADS and arXiv as tools for Claude Code. It speaks only MCP protocol 2026-07-28 (requires Claude Code >= 2.1.285); a 2025-era client is rejected with JSON-RPC error -32022.
 
-## Why this exists
-
-The original MCP servers for SciX and arXiv are excellent — but they run locally via stdio, which means they only work in desktop clients like Claude Desktop or the CLI. Claude on the web (claude.ai) connects to tools through **remote MCP servers** over HTTP. This project bridges that gap: it wraps both data sources behind a single Streamable HTTP endpoint you can deploy and point Claude at from Settings → Connectors.
-
-```
-claude.ai
-  └── Custom Connector
-        └── https://your-domain.com/mcp
-              ├── SciX / NASA ADS   (peer-reviewed astronomy, astrophysics, planetary science)
-              └── arXiv             (preprints across all sciences)
-```
+Set `SCIX_API_TOKEN` (get one at https://scixplorer.org/user/settings/token) for the SciX tools; arXiv tools need no token.
 
 ## Tools
 
@@ -54,98 +44,22 @@ claude.ai
 | `literature_review` | Structured literature review for a topic and optional paper set |
 | `literature_synthesis` | Synthesize findings across multiple papers into a state-of-the-art review |
 
-## Architecture
-
-```
-src/
-├── index.ts          # Hono + StreamableHTTPServerTransport (stateless)
-├── config.ts         # env vars
-├── formatters.ts     # shared markdown output helpers
-├── clients/
-│   ├── scix.ts       # HTTP client for ADS API (singleton)
-│   ├── arxiv.ts      # HTTP client + Atom XML parser + full-text extraction helpers for arXiv
-│   └── scix_docs.ts  # SciX documentation search index
-└── tools/            # one file per tool (schema + handler)
-
-test/                 # vitest tests
-data/
-└── scix/
-    └── chunked-index.json # generated SciX docs search index
-
-Dockerfile            # multi-stage node:22-alpine
-railway.json          # Railway deployment config
-```
-
-The server is **stateless** — a new MCP server instance is created per request. No sessions, no in-memory state. This keeps deployment simple and makes horizontal scaling trivial. The MCP endpoint supports Streamable HTTP over `GET /mcp` and `POST /mcp`.
-
-## Why Hono
-
-Hono replaced Express v5 as the HTTP layer because:
-
-- **Native `HttpBindings`** — Hono's `@hono/node-server` exposes the raw Node.js `IncomingMessage` and `ServerResponse` objects that MCP's `StreamableHTTPServerTransport` needs directly, with no adapter layer
-- **`RESPONSE_ALREADY_SENT` sentinel** — cleanly tells Hono not to write its own response after the MCP transport hijacks the socket for SSE streaming
-- **Zero overhead** — Hono adds no middleware stack, just routes; appropriate for a tight service with two endpoints
-
-## Setup
-
-### 1. Get a SciX API token
-
-Create an account at [scixplorer.org](https://scixplorer.org) and generate a token at `Settings → API Token`.
-
-### 2. Environment variables
-
-```env
-SCIX_API_TOKEN=your_token_here   # required
-PORT=3000                         # optional, default 3000
-MCP_BEARER_TOKEN=secret           # optional, require Authorization: Bearer secret for /mcp
-MCP_ALLOWED_ORIGINS=https://app.example.com,https://claude.ai  # optional exact Origin allowlist
-MCP_RESOURCE_URL=https://your-domain.railway.app/mcp  # optional canonical MCP resource URL
-MCP_AUTHORIZATION_SERVERS=https://auth.example.com     # optional OAuth authorization server metadata issuer(s)
-MCP_AUTH_SCOPES=research:read,research:write           # optional scopes for WWW-Authenticate challenges
-```
-
-Requests without an `Origin` header are allowed for server-to-server MCP clients. Requests with an `Origin` header must match `MCP_ALLOWED_ORIGINS`; when the allowlist is unset, only localhost origins are accepted for local development. Set explicit origins in production when using browser-based clients.
-
-`MCP_BEARER_TOKEN` is a simple private-deployment guard. For OAuth-compatible deployments, set `MCP_RESOURCE_URL` and `MCP_AUTHORIZATION_SERVERS`; the server will expose OAuth Protected Resource Metadata at `/.well-known/oauth-protected-resource` and include `resource_metadata` in `WWW-Authenticate` responses.
-
-### 3. Run locally
-
-```bash
-npm install
-npm run dev
-```
-
-### 4. Deploy to Railway
-
-Connect the repo in Railway and add the `SCIX_API_TOKEN` environment variable. Railway picks up `railway.json` and builds from the root-level `Dockerfile` automatically.
-
-After deploy, check `/health`; it returns the server version and deployment commit when Railway exposes `RAILWAY_GIT_COMMIT_SHA`.
-
-### 5. Add to Claude
-
-In Claude → Settings → Connectors → Add custom connector:
-
-```
-https://your-domain.railway.app/mcp
-```
-
 ## Development
 
 ```bash
-pnpm install          # install deps
-pnpm build            # TypeScript → build/
-pnpm test             # run the test suite
-pnpm test:watch       # watch mode
-pnpm dev              # watch + run (tsx)
+pnpm install
+pnpm build       # tsc -> build/
+pnpm typecheck   # src + tests
+pnpm test
+pnpm smoke       # spawns build/index.js and talks 2026-07-28 over stdio
 ```
+
+Stdout carries the protocol: log to stderr only (`src/stdout-guard.ts` redirects `console.log`).
 
 ## Tech stack
 
-- **Hono** + `@hono/node-server` — HTTP server with native Node.js bindings
-- **MCP SDK** `@modelcontextprotocol/sdk` — Streamable HTTP transport (stateless)
-- **Zod v4** — schema validation and type inference
-- **TypeScript 6.0** / Node.js 22
-- **vitest** — test suite across all tools and clients
+- `@modelcontextprotocol/server` 2.x, stdio (`serveStdio`, legacy openings rejected)
+- Zod v4, TypeScript 7 (native `tsc`), Node 24+, vitest 5
 
 ## Credits
 
