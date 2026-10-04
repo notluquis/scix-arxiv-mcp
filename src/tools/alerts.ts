@@ -60,6 +60,17 @@ async function load(): Promise<Loaded> {
   return { watches: [], warning: `watches.json was unreadable; it was preserved as ${moved} and the watch list started empty.` };
 }
 
+/** Read-only peek for prompt completions: never quarantines or throws. */
+export async function peekWatches(): Promise<{ topics: string[]; ids: string[] }> {
+  try {
+    const data = JSON.parse(await fs.readFile(watchesFile(), 'utf8')) as { watches?: unknown };
+    const ws = Array.isArray(data.watches) ? data.watches.filter(isWatch) : [];
+    return { topics: ws.map(w => w.topic), ids: [...new Set(ws.flatMap(w => w.seen_at_watermark))] };
+  } catch {
+    return { topics: [], ids: [] };
+  }
+}
+
 async function save(watches: Watch[]): Promise<void> {
   const file = watchesFile();
   const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
