@@ -78,3 +78,8 @@ export function bibcodeSegment(value: string): string {
   }
   return encodeURIComponent(value);
 }
+
+/** Quotes a value for a Solr phrase: `\` and `"` are escaped so it cannot break out of the quotes. */
+export function solrPhrase(value: string): string {
+  return `"${value.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}

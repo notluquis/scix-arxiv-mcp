@@ -17,6 +17,8 @@ const HTML = `<html><body><article><h1>T</h1><section><h2>Introduction</h2><p>Bo
 <section><h2>Method</h2><p>More.</p></section><section><h2>Conclusion</h2><p>Done.</p></section>
 <section><h2>References</h2><p>[1] X.</p></section></article></body></html>`;
 
+let objectsBody: unknown = { M31: { id: '1', canonical: 'M  31' } };
+
 function res(body: unknown, text?: string) {
   return {
     ok: true, status: 200, headers: new Headers(),
@@ -27,6 +29,12 @@ function res(body: unknown, text?: string) {
 
 function route(url: string, init?: RequestInit): Response {
   const method = init?.method ?? 'GET';
+  if (url.includes('author-affiliation/search')) return res({ data: [{ authorName: 'Doe, J', affiliations: { name: 'MIT', years: ['2024'], lastActiveDate: '2024/05' } }] });
+  if (url.includes('author-affiliation/export')) return res(null, 'Doe, J,MIT,2024/05');
+  if (url.endsWith('/objects/query')) return res({ query: '(object:M31)' });
+  if (url.endsWith('/objects')) return res(JSON.parse(JSON.stringify(objectsBody)));
+  if (url.includes('citation_helper')) return res([{ bibcode: 'S1', title: 'Suggested', author: 'Roe, R', score: 2 }]);
+  if (url.includes('reference/text')) return res({ resolved: [{ refstring: 'R', bibcode: 'B', score: '1.0' }] });
   if (url.includes('search/query')) return res({ response: { numFound: 1, docs: [DOC] } });
   if (url.includes('/metrics')) return res({ indicators: { h: 1 }, 'citation stats': {}, 'basic stats': {} });
   if (url.includes('export/')) return res({ export: '@article{a}' });
@@ -48,6 +56,13 @@ const SCIX_CALLS: Array<[string, Record<string, unknown>]> = [
   ['scix_find_similar', { bibcode: '2019ApJ...882L..24A' }],
   ['scix_get_metrics', { bibcodes: ['2019ApJ...882L..24A'] }],
   ['scix_export', { bibcodes: ['2019ApJ...882L..24A'], format: 'ris' }],
+  ['scix_author_papers', { author: 'Hawking, S' }],
+  ['scix_author_papers', { orcid: '0000-0002-1825-0097', include_metrics: false }],
+  ['scix_author_affiliations', { bibcodes: ['2019ApJ...882L..24A'], export_format: 'csv' }],
+  ['scix_resolve_objects', { names: ['M31'], expand_query: true }],
+  ['scix_citation_helper', { bibcodes: ['2019ApJ...882L..24A'] }],
+  ['scix_resolve_references', { references: ['R'] }],
+  ['scix_search', { query: 'black holes', collection: 'astronomy' }],
   ['scix_search_docs', { query: 'search syntax' }],
   ['scix_library_list', {}],
   ['scix_library_get', { library_id: 'abc123' }],
@@ -87,6 +102,17 @@ describe('every tool through the protocol', () => {
     expect(r.isError).toBeFalsy();
     const text = (r.content as { text: string }[])[0].text;
     expect(JSON.parse(text)).toEqual(r.structuredContent);
+  });
+
+  it('scix_resolve_objects: a 200 response carrying an Error key is an isError result', async () => {
+    objectsBody = { Error: 'Unable to get results!', 'Error Info': 'SIMBAD timeout' };
+    try {
+      const r = await c.client.callTool({ name: 'scix_resolve_objects', arguments: { names: ['M31'] } });
+      expect(r.isError).toBe(true);
+      expect((r.content as { text: string }[])[0].text).toContain('Unable to get results');
+    } finally {
+      objectsBody = { M31: { id: '1', canonical: 'M  31' } };
+    }
   });
 
   it('arxiv_read_paper and arxiv_citation_graph satisfy their output schemas', async () => {

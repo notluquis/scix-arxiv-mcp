@@ -17,7 +17,7 @@ const MAX_AUTHORS = 25;
 
 // ── Structured shapes ────────────────────────────────────────────────────────
 
-const scixItemOut = z.object({
+export const scixItemOut = z.object({
   bibcode: z.string().optional(),
   title: z.string(),
   authors: z.array(z.string()),
@@ -35,9 +35,9 @@ const scixPaperOut = scixItemOut.extend({
   url: z.string().optional(),
 });
 
-type Doc = Record<string, unknown>;
+export type Doc = Record<string, unknown>;
 
-function scixItem(p: Doc) {
+export function scixItem(p: Doc) {
   const authors = (p['author'] as string[] | undefined) ?? [];
   return {
     bibcode: p['bibcode'] as string | undefined,
@@ -80,6 +80,9 @@ export const scixSearchSchema = z.object({
   sort: z.enum(['score desc', 'citation_count desc', 'date desc', 'date asc', 'read_count desc'])
     .default('score desc')
     .describe('Sort order'),
+  collection: z.enum(['astronomy', 'physics', 'general']).optional().describe(
+    'Restrict to one SciX collection (sent as fq=database:<value>). Omit to search all.'
+  ),
   response_format: responseFormat,
 });
 
@@ -93,6 +96,7 @@ export async function handleScixSearch(
     rows: input.rows,
     start: input.start,
     sort: input.sort,
+    fq: input.collection ? `database:${input.collection}` : undefined,
   }) as SearchResponse;
 
   const numFound = data.response?.numFound ?? 0;
@@ -375,13 +379,25 @@ export async function handleScixSearchDocs(input: In<typeof scixSearchDocsSchema
 
 const itemList = listOutput(scixItemOut);
 
+/** Tools 1-6 of the catalog; the author/object tools and the docs tool register after them (see server.ts). */
 export function registerScixTools(server: McpServer): void {
   addTool(server, 'scix_search', {
     title: 'Search SciX / ADS',
     description:
       'Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. ' +
       'Covers astronomy, astrophysics, physics, planetary science, and related fields. ' +
-      'Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details.',
+      'Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details. ' +
+      'Query syntax is Solr: field:value, AND/OR/NOT, wildcards, year:2020-2024. Useful fields and operators: ' +
+      'author:"Last, F" (author:"^Last" = first author), abs:, title:, bibcode:, doi:, orcid:, ' +
+      'uat:"UAT keyword", has:body (full text indexed) and other has: fields, ' +
+      'planetary_feature:"...", object:"M31" (resolved through SIMBAD/NED directly, no need for ' +
+      'scix_resolve_objects first), citations(...), references(...), similar(...), topn(). ' +
+      '`collection` limits to astronomy, physics or general. ' +
+      'ADS is being replaced by SciX on 2026-11-16; the corpus then grows to about 36M records, adding the ' +
+      'earth-science and heliophysics collections. ' +
+      'Use scix_search_docs for the full syntax reference. ' +
+      // TODO(verify): "earthscience" as a database: value is unconfirmed in the bundled docs, so it is not exposed in `collection`.
+      'For one author\'s papers with h-index use scix_author_papers.',
     inputSchema: scixSearchSchema,
     outputSchema: itemList,
     annotations: READ_EXTERNAL,
@@ -442,7 +458,10 @@ export function registerScixTools(server: McpServer): void {
     annotations: READ_EXTERNAL,
     icons: SCIX_ICONS,
   }, input => handleScixExport(getScixClient(), input));
+}
 
+/** Tool 12 of the catalog. */
+export function registerScixDocsTool(server: McpServer): void {
   addTool(server, 'scix_search_docs', {
     title: 'Search SciX docs',
     description: 'Search SciX help docs, search syntax guides, and usage notes.',

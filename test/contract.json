@@ -107,7 +107,7 @@
         "openWorldHint": true,
         "readOnlyHint": true
       },
-      "description": "Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. Covers astronomy, astrophysics, physics, planetary science, and related fields. Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details.",
+      "description": "Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. Covers astronomy, astrophysics, physics, planetary science, and related fields. Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details. Query syntax is Solr: field:value, AND/OR/NOT, wildcards, year:2020-2024. Useful fields and operators: author:\"Last, F\" (author:\"^Last\" = first author), abs:, title:, bibcode:, doi:, orcid:, uat:\"UAT keyword\", has:body (full text indexed) and other has: fields, planetary_feature:\"...\", object:\"M31\" (resolved through SIMBAD/NED directly, no need for scix_resolve_objects first), citations(...), references(...), similar(...), topn(). `collection` limits to astronomy, physics or general. ADS is being replaced by SciX on 2026-11-16; the corpus then grows to about 36M records, adding the earth-science and heliophysics collections. Use scix_search_docs for the full syntax reference. For one author's papers with h-index use scix_author_papers.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -120,6 +120,15 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
+          "collection": {
+            "description": "Restrict to one SciX collection (sent as fq=database:<value>). Omit to search all.",
+            "enum": [
+              "astronomy",
+              "physics",
+              "general"
+            ],
+            "type": "string"
+          },
           "query": {
             "description": "SciX/ADS search query. Supports Solr syntax: field:value, AND/OR/NOT, wildcards. Examples: \"black holes AND galaxy\", \"author:Einstein\", \"abs:dark matter year:2020-2024\"",
             "maxLength": 1000,
@@ -733,6 +742,578 @@
         "type": "object"
       },
       "title": "Export bibliography"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "List a person's papers in SciX/ADS by author name (\"Last, F\") or ORCID iD, optionally first-author only and limited to a year range, newest first. By default also returns h-index, g-index, i10, tori and citation totals computed over the returned papers (up to `rows`, max 200). Author names can be ambiguous; prefer orcid when known.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "author": {
+            "description": "Author name as \"Last, First\" or \"Last, F\". Example: \"Hawking, S\". Give this or orcid.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "first_author_only": {
+            "default": false,
+            "description": "Only papers where this person is first author (author name only, not with orcid)",
+            "type": "boolean"
+          },
+          "include_metrics": {
+            "default": true,
+            "description": "Also compute h/g/i10, tori and citation totals over the returned papers",
+            "type": "boolean"
+          },
+          "orcid": {
+            "description": "ORCID iD (0000-0002-1825-0097). Takes precedence over author and matches that person only.",
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "default": 20,
+            "description": "Number of papers (max 200)",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "year_from": {
+            "description": "Earliest publication year",
+            "maximum": 3000,
+            "minimum": 1000,
+            "type": "integer"
+          },
+          "year_to": {
+            "description": "Latest publication year",
+            "maximum": 3000,
+            "minimum": 1000,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "scix_author_papers",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "authors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "bibcode": {
+                  "type": "string"
+                },
+                "citation_count": {
+                  "type": "number"
+                },
+                "pub": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "authors"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "metrics": {
+            "additionalProperties": false,
+            "properties": {
+              "g": {
+                "type": "number"
+              },
+              "h": {
+                "type": "number"
+              },
+              "i10": {
+                "type": "number"
+              },
+              "m": {
+                "type": "number"
+              },
+              "refereed_citations": {
+                "type": "number"
+              },
+              "tori": {
+                "type": "number"
+              },
+              "total_citations": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "start",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Author papers and metrics"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Build the SciX author-affiliations report (co-authors and their recent affiliations, as requested by grant agencies) for a list of bibcodes or for the results of a query (first 500). maxauthor limits to the first N authors per paper; numyears to the last N years. export_format csv/text/browser also returns the report rendered by the ADS export service.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "bibcodes": {
+            "description": "Bibcodes to report on (max 500). Give this or query.",
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          },
+          "export_format": {
+            "description": "Also render the report as csv, text or browser (via the ADS export service) for grant co-author forms",
+            "enum": [
+              "csv",
+              "text",
+              "browser"
+            ],
+            "type": "string"
+          },
+          "maxauthor": {
+            "default": 3,
+            "description": "First N authors of each paper to report",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "numyears": {
+            "default": 4,
+            "description": "Affiliations from the last N years",
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "SciX query whose first 500 results are used instead of explicit bibcodes",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "scix_author_affiliations",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "export": {
+            "type": "string"
+          },
+          "papers": {
+            "type": "number"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "affiliation": {
+                  "type": "string"
+                },
+                "author": {
+                  "type": "string"
+                },
+                "last_active": {
+                  "type": "string"
+                },
+                "years": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "author",
+                "affiliation",
+                "years"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "papers",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "title": "Author affiliations report"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Resolve object names (M31, NGC 1275, ...) to SIMBAD or NED identifiers and canonical names. expand_query also returns the Solr query that includes those identifiers. You usually do not need this: scix_search accepts object:\"M31\" directly.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "expand_query": {
+            "description": "Also return the Solr query that expands each object to its SIMBAD/NED identifiers",
+            "type": "boolean"
+          },
+          "names": {
+            "description": "Astronomical object names, e.g. [\"M31\", \"NGC 1275\"]",
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "default": "simbad",
+            "description": "Name resolver",
+            "enum": [
+              "simbad",
+              "ned"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "type": "object"
+      },
+      "name": "scix_resolve_objects",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "expanded_queries": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "query": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "query"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "canonical": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "input": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "input",
+                "id",
+                "canonical"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Resolve astronomical objects"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Given the bibcodes of papers you already cite, suggest up to 10 missing citations: papers that cite or are cited by several of them but are not in the list. The score counts how many of your papers each suggestion is connected to.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "bibcodes": {
+            "description": "Bibcodes of the papers you already cite (max 100)",
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "bibcodes"
+        ],
+        "type": "object"
+      },
+      "name": "scix_citation_helper",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "author": {
+                  "type": "string"
+                },
+                "bibcode": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "bibcode",
+                "title",
+                "score"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "start",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Suggest missing citations"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Resolve free-text reference strings (as in a paper's bibliography) to SciX bibcodes. Returns the bibcode, a confidence score (0 low to 1 high) and an error comment per reference. Up to 50 per call.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "references": {
+            "description": "Free-text reference strings, e.g. \"Blandford, R. D., & Znajek, R. L. 1977, MNRAS, 179, 433\" (max 50)",
+            "items": {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "references"
+        ],
+        "type": "object"
+      },
+      "name": "scix_resolve_references",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bibcode": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "reference": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "reference"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "start",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Resolve reference strings"
     },
     {
       "annotations": {
