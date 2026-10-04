@@ -59,6 +59,16 @@ describe('createLimiter', () => {
     await limit(); // resolves with no pending timer
   });
 
+  it('a clock stepped backwards waits at most one interval', async () => {
+    let t = 1_000_000;
+    const waits: number[] = [];
+    const limit = createLimiter(3000, { now: () => t, sleep: async ms => { waits.push(ms); } });
+    await limit();
+    t -= 3_600_000;
+    await limit();
+    expect(waits).toEqual([3000]);
+  });
+
   it('SCIX_ARXIV_RATE_SCALE=0 removes the wait', async () => {
     process.env.SCIX_ARXIV_RATE_SCALE = '0';
     const limit = createLimiter(3000);

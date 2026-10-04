@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { registerArxivTools } from './tools/arxiv.js';
 import { registerScixLibraryTools } from './tools/scix_libraries.js';
 import { registerScixAuthorTools } from './tools/scix_authors.js';
+import { registerAlertTools } from './tools/alerts.js';
 import { registerHealthTool } from './tools/health.js';
 import { registerScixDocsTool, registerScixTools } from './tools/scix.js';
 
@@ -21,6 +22,7 @@ export function buildServer(): McpServer {
   registerScixDocsTool(server);
   registerScixLibraryTools(server);
   registerArxivTools(server);
+  registerAlertTools(server);
   registerHealthTool(server);
 
   // ── Prompts ────────────────────────────────────────────────────────────

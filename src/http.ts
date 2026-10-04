@@ -27,7 +27,9 @@ export function createLimiter(
   let last = -Infinity;
   return () => {
     const run = tail.then(async () => {
-      const wait = Math.max(0, last + intervalMs * rateScale() - now());
+      // Clamped to one interval: a clock stepped backwards must not stall the queue.
+      const gap = intervalMs * rateScale();
+      const wait = Math.min(gap, Math.max(0, last + gap - now()));
       if (wait > 0) await sleep(wait);
       last = now();
     });

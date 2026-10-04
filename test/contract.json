@@ -3576,6 +3576,387 @@
     },
     {
       "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Save or update a standing arXiv query. A new watch starts at the current time, so the first check does not dump history. Re-watching the same topic string updates it; omit categories to keep them, [] clears them.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "categories": {
+            "description": "Optional arXiv category filter, e.g. [\"cs.LG\"]. On update, omit to keep the current categories; pass [] to clear them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_results": {
+            "description": "Papers returned per check (max 50; default 10 for a new watch, unchanged on update).",
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "description": "arXiv query to watch, same syntax as arxiv_search (field prefixes ti:/au:/abs:, quoted phrases, AND/OR/ANDNOT). Watching an existing topic string updates that watch.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "type": "object"
+      },
+      "name": "arxiv_watch_topic",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "type": "boolean"
+          },
+          "warning": {
+            "type": "string"
+          },
+          "watch": {
+            "additionalProperties": false,
+            "properties": {
+              "categories": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "last_checked": {
+                "type": "string"
+              },
+              "max_results": {
+                "type": "number"
+              },
+              "topic": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic",
+              "categories",
+              "max_results",
+              "last_checked",
+              "created_at",
+              "updated_at"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "created",
+          "watch"
+        ],
+        "type": "object"
+      },
+      "title": "Watch an arXiv topic"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Report papers submitted since each watch last reported (oldest first), and advance its watermark. When a page is full, more_pending is true: call again to continue where it stopped. Omit topic to check all watches.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "description": "Check only this watch (exact topic string). Omit to check every watch.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "arxiv_check_alerts",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "last_checked": {
+                  "type": "string"
+                },
+                "more_pending": {
+                  "type": "boolean"
+                },
+                "new_papers": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "abs_url": {
+                        "type": "string"
+                      },
+                      "arxiv_id": {
+                        "type": "string"
+                      },
+                      "authors": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "categories": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "published": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "arxiv_id",
+                      "title",
+                      "authors",
+                      "published",
+                      "categories",
+                      "abs_url"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "topic": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "topic",
+                "new_papers",
+                "more_pending",
+                "last_checked"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "total_new": {
+            "type": "number"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "results",
+          "total_new"
+        ],
+        "type": "object"
+      },
+      "title": "Check arXiv alerts"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List saved topic watches without checking for papers or moving any watermark.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "arxiv_list_watches",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "warning": {
+            "type": "string"
+          },
+          "watches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "categories": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "last_checked": {
+                  "type": "string"
+                },
+                "max_results": {
+                  "type": "number"
+                },
+                "topic": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "topic",
+                "categories",
+                "max_results",
+                "last_checked",
+                "created_at",
+                "updated_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "watches"
+        ],
+        "type": "object"
+      },
+      "title": "List arXiv watches"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Delete a saved topic watch by its exact topic string.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "topic": {
+            "description": "Exact topic string of the watch to remove.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "type": "object"
+      },
+      "name": "arxiv_unwatch_topic",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "type": "boolean"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "title": "Remove an arXiv watch"
+    },
+    {
+      "annotations": {
         "openWorldHint": true,
         "readOnlyHint": true
       },

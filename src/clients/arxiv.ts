@@ -44,6 +44,9 @@ export interface ArxivSearchOptions {
   dateFrom?: string;
   /** YYYY-MM-DD — filter papers submitted on or before this date */
   dateTo?: string;
+  /** Raw minute-resolution bounds YYYYMMDDHHMM (GMT, both inclusive); wins over dateFrom/dateTo. */
+  submittedFrom?: string;
+  submittedTo?: string;
   /** arXiv category list, e.g. ['cs.LG', 'cs.CL'] */
   categories?: string[];
 }
@@ -122,7 +125,9 @@ function buildArxivUrl(
 ): string {
   const parts: string[] = [query];
 
-  if (opts.dateFrom || opts.dateTo) {
+  if (opts.submittedFrom && opts.submittedTo) {
+    parts.push(`submittedDate:[${opts.submittedFrom} TO ${opts.submittedTo}]`);
+  } else if (opts.dateFrom || opts.dateTo) {
     // Open ends use explicit bounds: arXiv documents only closed numeric ranges.
     const from = opts.dateFrom ? toArxivDate(opts.dateFrom, 'start') : '000101010000';
     const to = opts.dateTo ? toArxivDate(opts.dateTo, 'end') : '999912312359';

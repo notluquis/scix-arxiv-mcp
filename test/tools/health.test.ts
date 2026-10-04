@@ -26,7 +26,7 @@ describe('health_check', () => {
     expect(report.scix_token_configured).toBe(false);
     expect(report.ads_probe.state).toBe('skipped');
     expect(report.protocol).toBe('2026-07-28');
-    expect(report.tool_count).toBe(35);
+    expect(report.tool_count).toBe(39);
     expect(report.server.name).toBe('scix-arxiv-mcp');
     expect(report.server.sdk_version).toMatch(/^\d+\.\d+\.\d+/);
     expect(fetchMock).not.toHaveBeenCalled();
