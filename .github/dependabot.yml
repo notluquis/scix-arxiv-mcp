@@ -1,0 +1,21 @@
+version: 2
+
+# No `cooldown`, on purpose (see zizmor.yml): the goal is to hear about a new version the
+# day it ships, above all the MCP SDK. The window for a compromised release is accepted
+# because Dependabot PRs are never auto-merged: they go through CI and review.
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore"

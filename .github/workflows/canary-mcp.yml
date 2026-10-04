@@ -1,0 +1,66 @@
+name: canary-mcp
+
+# Runs the suite against the LATEST @modelcontextprotocol/server, @modelcontextprotocol/client
+# and zod, ignoring the lockfile. The rest of CI tests the pinned versions; this tests what
+# shipped today, so an SDK break shows up the day it is released instead of when Dependabot
+# catches up. Nothing is committed. Not triggered by pushes or PRs; failure arrives via the
+# Actions notification.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # daily, 13:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Block undeclared egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Bumps in the working tree only; the result is never committed.
+      - name: Bump SDK and zod to latest
+        run: pnpm add -D @modelcontextprotocol/server@latest @modelcontextprotocol/client@latest zod@latest
+
+      - name: Versions under test
+        run: |
+          for p in @modelcontextprotocol/server @modelcontextprotocol/client zod; do
+            echo "$p $(node -p "require('./node_modules/$p/package.json').version")"
+          done
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm smoke

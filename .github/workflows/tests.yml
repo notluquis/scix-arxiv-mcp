@@ -1,0 +1,107 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Mondays 12:00 UTC. Tests never touch arXiv/ADS/Semantic Scholar; this only
+    # detects that a new dependency or Node release breaks the suite.
+    - cron: "0 12 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [24, 26]
+    steps:
+      # Egress is blocked except for npm, GitHub and nodejs.org. No arxiv.org, adsabs.harvard.edu
+      # or semanticscholar.org host is listed, so "tests never hit the network" is enforced,
+      # not just promised. If CI goes red on an undeclared destination, look at what it is
+      # before adding it; do not fall back to audit.
+      - name: Block undeclared egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the version from "packageManager" in package.json.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      # Spawns build/index.js and speaks MCP 2026-07-28 to it over stdio.
+      - run: pnpm smoke
+
+  rate-guard:
+    name: arXiv rate guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Block undeclared egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # arXiv asks for one request every 3 seconds. Loosening the constant must be a
+      # deliberate edit of this line too, not a silent change.
+      - name: ARXIV_MIN_INTERVAL_MS is still 3000
+        run: |
+          grep -q 'ARXIV_MIN_INTERVAL_MS = 3000' src/http.ts || {
+            echo "::error::ARXIV_MIN_INTERVAL_MS in src/http.ts is no longer 3000 (arXiv API terms)."
+            exit 1
+          }
+
+  workflows:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4

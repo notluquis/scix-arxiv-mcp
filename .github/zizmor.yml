@@ -1,0 +1,13 @@
+# `dependabot-cooldown` asks for a cooldown period in dependabot.yml. It was removed on
+# purpose (see the comment there): hearing about a release the same day matters more here,
+# above all for the MCP SDK. The supply-chain window is accepted because Dependabot PRs are
+# not auto-merged: they go through CI and review.
+rules:
+  dependabot-cooldown:
+    ignore:
+      - dependabot.yml
+  # The canary exists to install the newest SDK and zod outside the lockfile, and nothing it
+  # installs is committed or published. Only that workflow is exempt.
+  adhoc-packages:
+    ignore:
+      - canary-mcp.yml
