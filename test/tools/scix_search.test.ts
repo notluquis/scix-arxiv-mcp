@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ScixClient } from '../../src/clients/scix.js';
-import { handleScixSearch } from '../../src/tools/scix_search.js';
+import { handleScixSearch } from '../../src/tools/scix.js';
 import { mockFetch, restoreFetch } from '../helpers/mockFetch.js';
 
 const MOCK_DOC = {
@@ -26,10 +26,10 @@ describe('handleScixSearch', () => {
       sort: 'score desc',
     });
 
-    expect(result).toContain('Black Holes and Galaxy Formation');
-    expect(result).toContain('2024ApJ...123..456A');
-    expect(result).toContain('42');
-    expect(result).toContain('Author, A.');  // list shows first author only
+    expect(result.text).toContain('Black Holes and Galaxy Formation');
+    expect(result.text).toContain('2024ApJ...123..456A');
+    expect(result.text).toContain('42');
+    expect(result.text).toContain('Author, A.');  // list shows first author only
   });
 
   it('shows pagination hint when more results exist', async () => {
@@ -43,7 +43,7 @@ describe('handleScixSearch', () => {
       sort: 'score desc',
     });
 
-    expect(result).toContain('start=10');
+    expect(result.text).toContain('start=10');
   });
 
   it('no pagination hint when all results shown', async () => {
@@ -57,7 +57,7 @@ describe('handleScixSearch', () => {
       sort: 'score desc',
     });
 
-    expect(result).not.toContain('start=');
+    expect(result.text).not.toContain('start=');
   });
 
   it('returns total count in heading', async () => {
@@ -71,6 +71,18 @@ describe('handleScixSearch', () => {
       sort: 'citation_count desc',
     });
 
-    expect(result).toContain('500');
+    expect(result.text).toContain('500');
+  });
+
+  it('returns structured total, start and items', async () => {
+    mockFetch({ body: { response: { numFound: 100, docs: [MOCK_DOC] } } });
+
+    const result = await handleScixSearch(new ScixClient(), { query: 'stars', rows: 10, start: 20, sort: 'score desc' });
+
+    expect(result.structured).toMatchObject({
+      total: 100,
+      start: 20,
+      items: [{ bibcode: '2024ApJ...123..456A', title: 'Black Holes and Galaxy Formation', year: '2024', citation_count: 42 }],
+    });
   });
 });

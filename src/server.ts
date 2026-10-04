@@ -1,301 +1,22 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/server';
-import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { getScixClient } from './clients/scix.js';
-
-// SciX tools
-import { scixSearchSchema, handleScixSearch } from './tools/scix_search.js';
-import { scixGetPaperSchema, handleScixGetPaper } from './tools/scix_get_paper.js';
-import { scixGetCitationsSchema, handleScixGetCitations } from './tools/scix_get_citations.js';
-import { scixGetMetricsSchema, handleScixGetMetrics } from './tools/scix_get_metrics.js';
-import { scixExportSchema, handleScixExport } from './tools/scix_export.js';
-import { scixFindSimilarSchema, handleScixFindSimilar } from './tools/scix_find_similar.js';
-import { scixSearchDocsSchema, handleScixSearchDocs } from './tools/scix_search_docs.js';
-import {
-  scixLibraryListSchema, handleScixLibraryList,
-  scixLibraryGetSchema, handleScixLibraryGet,
-  scixLibraryCreateSchema, handleScixLibraryCreate,
-  scixLibraryDocumentsSchema, handleScixLibraryDocuments,
-} from './tools/scix_library.js';
-import { scixLibraryNoteSchema, handleScixLibraryNote } from './tools/scix_library_note.js';
-
-// arXiv tools
-import { arxivSearchSchema, handleArxivSearch } from './tools/arxiv_search.js';
-import { arxivGetPaperSchema, handleArxivGetPaper } from './tools/arxiv_get_paper.js';
-import { arxivReadPaperSchema, handleArxivReadPaper } from './tools/arxiv_read_paper.js';
-import { arxivDownloadPaperSchema, handleArxivDownloadPaper } from './tools/arxiv_download_paper.js';
-import { arxivCitationGraphSchema, getArxivCitationGraph } from './tools/arxiv_citation_graph.js';
+import { registerArxivTools } from './tools/arxiv.js';
+import { registerScixLibraryTools } from './tools/scix_libraries.js';
+import { registerScixTools } from './tools/scix.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
-
-const textToolOutputSchema = z.object({
-  status: z.enum(['success', 'error']),
-  text: z.string(),
-});
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function textToolResult(handler: () => Promise<string>): Promise<CallToolResult> {
-  try {
-    const text = await handler();
-    return {
-      content: [{ type: 'text', text }],
-      structuredContent: { status: 'success', text },
-      isError: false,
-    };
-  } catch (error) {
-    const text = `Error: ${errorMessage(error)}`;
-    return {
-      content: [{ type: 'text', text }],
-      structuredContent: { status: 'error', text },
-      isError: true,
-    };
-  }
-}
-
-function registerTextTool<Args extends z.ZodRawShape>(
-  server: McpServer,
-  name: string,
-  description: string,
-  inputSchema: Args,
-  annotations: ToolAnnotations,
-  handler: (input: z.infer<z.ZodObject<Args>>) => Promise<string>
-) {
-  const callback = async (input: z.infer<z.ZodObject<Args>>) =>
-    textToolResult(() => handler(input));
-
-  server.registerTool(
-    name,
-    {
-      description,
-      inputSchema: z.object(inputSchema),
-      outputSchema: textToolOutputSchema,
-      annotations,
-    },
-    callback
-  );
-}
-
-const READ_EXTERNAL: ToolAnnotations = { readOnlyHint: true, openWorldHint: true };
-const READ_LOCAL: ToolAnnotations = { readOnlyHint: true, openWorldHint: false };
-const CREATE_REMOTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
-const MUTATE_REMOTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 
 // ── MCP server factory ───────────────────────────────────────────────────────
 
 export function buildServer(): McpServer {
   const server = new McpServer({ name: 'scix-arxiv-mcp', version: pkg.version });
 
-  // ── SciX search & retrieval ────────────────────────────────────────────
-
-  registerTextTool(
-    server,
-    'scix_search',
-    'Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. ' +
-    'Covers astronomy, astrophysics, physics, planetary science, and related fields. ' +
-    'Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details.',
-    scixSearchSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixSearch(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_get_paper',
-    'Get full metadata and abstract for a paper in SciX/ADS by its bibcode, arXiv ID, or DOI.',
-    scixGetPaperSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixGetPaper(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_get_citations',
-    'Get papers that cite a given SciX/ADS paper (citations), or papers it cites (references).',
-    scixGetCitationsSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixGetCitations(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_get_metrics',
-    'Compute citation metrics (h-index, g-index, i10-index, citation counts) for a set of papers.',
-    scixGetMetricsSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixGetMetrics(getScixClient(), input)
-  );
-
-  // ── SciX export ────────────────────────────────────────────────────────
-
-  registerTextTool(
-    server,
-    'scix_export',
-    'Export a list of papers in a bibliography format. ' +
-    'Supports BibTeX, RIS (Zotero/Mendeley), EndNote, AASTeX, IEEE, MNRAS, and 18 other formats. ' +
-    'Pass bibcodes from scix_search results. Ideal for building reference lists.',
-    scixExportSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixExport(getScixClient(), input)
-  );
-
-  // ── SciX libraries ─────────────────────────────────────────────────────
-
-  registerTextTool(
-    server,
-    'scix_library_list',
-    'List your SciX personal libraries (saved paper collections). ' +
-    'Returns library IDs, names, paper counts, and permissions.',
-    scixLibraryListSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixLibraryList(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_library_get',
-    'Get the contents and metadata of a specific SciX library by its ID.',
-    scixLibraryGetSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixLibraryGet(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_library_create',
-    'Create a new personal library in SciX to save and organize papers.',
-    scixLibraryCreateSchema,
-    CREATE_REMOTE,
-    async (input) => handleScixLibraryCreate(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_library_documents',
-    'Add or remove papers from a SciX library. Pass bibcodes and "add" or "remove".',
-    scixLibraryDocumentsSchema,
-    MUTATE_REMOTE,
-    async (input) => handleScixLibraryDocuments(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_find_similar',
-    'Find papers with similar content to a given SciX/ADS paper using its bibcode. ' +
-    'Uses the SciX similar() operator to surface related work.',
-    scixFindSimilarSchema,
-    READ_EXTERNAL,
-    async (input) => handleScixFindSimilar(getScixClient(), input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_search_docs',
-    'Search SciX help docs, search syntax guides, and usage notes.',
-    scixSearchDocsSchema,
-    READ_LOCAL,
-    async (input) => handleScixSearchDocs(input)
-  );
-
-  registerTextTool(
-    server,
-    'scix_library_note',
-    'Get, set, or delete a personal annotation note for a paper in a SciX library.',
-    scixLibraryNoteSchema,
-    MUTATE_REMOTE,
-    async (input) => handleScixLibraryNote(getScixClient(), input)
-  );
-
-  // ── arXiv ──────────────────────────────────────────────────────────────
-
-  registerTextTool(
-    server,
-    'arxiv_search',
-    'Search arXiv preprint server across all scientific disciplines. ' +
-    'Supports field prefixes (ti:, au:, abs:, cat:), date ranges, and category filters.',
-    arxivSearchSchema,
-    READ_EXTERNAL,
-    async (input) => handleArxivSearch(input)
-  );
-
-  registerTextTool(
-    server,
-    'arxiv_get_paper',
-    'Get full metadata and abstract for a specific arXiv paper by its ID (e.g. "2103.01231"). ' +
-    'Returns title, authors, abstract, categories, and links to PDF and HTML versions.',
-    arxivGetPaperSchema,
-    READ_EXTERNAL,
-    async (input) => handleArxivGetPaper(input)
-  );
-
-  registerTextTool(
-    server,
-    'arxiv_read_paper',
-    'Fetch a paper from arXiv and extract its full text from the HTML rendering or source archive as markdown-ready text.',
-    arxivReadPaperSchema,
-    READ_EXTERNAL,
-    async (input) => handleArxivReadPaper(input)
-  );
-
-  registerTextTool(
-    server,
-    'arxiv_download_paper',
-    'Download a paper from arXiv and extract full text from the PDF. Directly fetches and processes the PDF file.',
-    arxivDownloadPaperSchema,
-    READ_EXTERNAL,
-    async (input) => handleArxivDownloadPaper(input)
-  );
-
-  server.registerTool(
-    'arxiv_citation_graph',
-    {
-      description: 'Return papers citing an arXiv paper and papers it references using Semantic Scholar citation graph data.',
-      inputSchema: z.object(arxivCitationGraphSchema),
-      outputSchema: z.object({
-        status: z.enum(['success', 'error']),
-        paper_id: z.string(),
-        paper: z.object({
-          paper_id: z.string().optional(),
-          arxiv_id: z.string(),
-          title: z.string().optional(),
-          year: z.number().optional(),
-          authors: z.array(z.string()),
-          external_ids: z.record(z.string(), z.string()),
-        }).optional(),
-        citation_count: z.number().optional(),
-        reference_count: z.number().optional(),
-        citations: z.array(z.object({
-          paper_id: z.string().optional(),
-          title: z.string().optional(),
-          year: z.number().optional(),
-          authors: z.array(z.string()),
-          external_ids: z.record(z.string(), z.string()),
-          arxiv_id: z.string().optional(),
-        })).optional(),
-        references: z.array(z.object({
-          paper_id: z.string().optional(),
-          title: z.string().optional(),
-          year: z.number().optional(),
-          authors: z.array(z.string()),
-          external_ids: z.record(z.string(), z.string()),
-          arxiv_id: z.string().optional(),
-        })).optional(),
-        message: z.string().optional(),
-      }),
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    async (input) => {
-      const result = await getArxivCitationGraph(input);
-      return {
-        content: [{ type: 'text', text: result.text }],
-        structuredContent: result.structuredContent as unknown as Record<string, unknown>,
-        isError: result.isError,
-      };
-    }
-  );
+  // Registration order is the tools/list order (locked by test/contract.json):
+  // SciX/ADS tools, then SciX libraries, then arXiv.
+  registerScixTools(server);
+  registerScixLibraryTools(server);
+  registerArxivTools(server);
 
   // ── Prompts ────────────────────────────────────────────────────────────
 
@@ -367,7 +88,7 @@ export function buildServer(): McpServer {
             '',
             'AVAILABLE TOOLS:',
             '1. arxiv_read_paper: Use this tool to retrieve the full content of the paper with the provided arXiv ID',
-            '2. arxiv_download_paper: If HTML/TeX extraction is insufficient, use this tool to extract full text from the PDF',
+            '2. arxiv_read_paper with source="pdf": If HTML/TeX extraction is insufficient, extract full text from the PDF',
             '3. arxiv_search: Find related papers on the same topic to provide context',
             '4. arxiv_get_paper: Retrieve authoritative arXiv metadata and abstract',
             '5. scix_get_paper, scix_get_citations, scix_get_metrics, and scix_find_similar: Cross-check SciX/ADS metadata, citations, metrics, and related work when indexed',
@@ -376,7 +97,7 @@ export function buildServer(): McpServer {
             '<preparation>',
             '  - First, use arxiv_get_paper to retrieve metadata for the paper',
             '  - Then use arxiv_read_paper with the paper_id to get the full content',
-            '  - If arxiv_read_paper cannot retrieve sufficient full text, use arxiv_download_paper',
+            '  - If arxiv_read_paper cannot retrieve sufficient full text, call it again with source="pdf"',
             '  - If the paper is not found, use arxiv_search to find related papers while you wait',
             '  - If you find related papers, retrieve enough metadata or full text to compare them responsibly',
             '</preparation>',
@@ -465,7 +186,7 @@ export function buildServer(): McpServer {
           text: [
             `Summarize paper ${paper_id}.`,
             '',
-            'Use arxiv_get_paper and arxiv_read_paper as needed before summarizing. If full text extraction is insufficient, use arxiv_download_paper.',
+            'Use arxiv_get_paper and arxiv_read_paper as needed before summarizing. If full text extraction is insufficient, call arxiv_read_paper with source="pdf".',
             '',
             'Produce a concise, technically accurate summary of the target paper.',
             '',

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getArxivCitationGraph, handleArxivCitationGraph } from '../../src/tools/arxiv_citation_graph.js';
+import { handleArxivCitationGraph } from '../../src/tools/arxiv.js';
 import { mockFetch, restoreFetch } from '../helpers/mockFetch.js';
 
 describe('handleArxivCitationGraph', () => {
@@ -32,9 +32,9 @@ describe('handleArxivCitationGraph', () => {
 
     const result = await handleArxivCitationGraph({ paper_id: '1706.03762v7' });
 
-    expect(result).toContain('Citation Graph for arXiv:1706.03762');
-    expect(result).toContain('A citing paper');
-    expect(result).toContain('A referenced paper');
+    expect(result.text).toContain('Citation Graph for arXiv:1706.03762');
+    expect(result.text).toContain('A citing paper');
+    expect(result.text).toContain('A referenced paper');
 
     const [url] = mock.mock.calls[0];
     expect(url).toContain('api.semanticscholar.org');
@@ -54,22 +54,30 @@ describe('handleArxivCitationGraph', () => {
       },
     });
 
-    const result = await getArxivCitationGraph({ paper_id: '1706.03762' });
+    const result = await handleArxivCitationGraph({ paper_id: '1706.03762' });
 
-    expect(result.structuredContent.status).toBe('success');
-    expect(result.structuredContent.paper_id).toBe('1706.03762');
-    expect(result.structuredContent.paper?.authors).toEqual(['Vaswani, A.']);
-    expect(result.structuredContent.citation_count).toBe(0);
+    expect(result.structured.status).toBe('success');
+    expect(result.structured.paper_id).toBe('1706.03762');
+    expect(result.structured.paper?.authors).toEqual(['Vaswani, A.']);
+    expect(result.structured.citation_count).toBe(0);
   });
 
   it('returns a readable error when Semantic Scholar fails', async () => {
     mockFetch({ status: 404, text: 'not found' });
 
-    const result = await getArxivCitationGraph({ paper_id: '9999.99999' });
+    const result = await handleArxivCitationGraph({ paper_id: '9999.99999' });
 
     expect(result.text).toContain('Could not retrieve citation graph');
     expect(result.text).toContain('404');
     expect(result.isError).toBe(true);
-    expect(result.structuredContent.status).toBe('error');
+    expect(result.structured.status).toBe('error');
+  });
+
+  it('rejects a malformed id before any request is made', async () => {
+    const mock = mockFetch({ body: {} });
+
+    await expect(handleArxivCitationGraph({ paper_id: '1706.03762&fields=x' })).rejects.toThrow('Invalid arXiv id');
+
+    expect(mock).not.toHaveBeenCalled();
   });
 });

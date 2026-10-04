@@ -108,6 +108,15 @@
         "readOnlyHint": true
       },
       "description": "Search NASA SciX / ADS (Astrophysics Data System) for peer-reviewed papers. Covers astronomy, astrophysics, physics, planetary science, and related fields. Returns bibcodes, titles, authors, citation counts. Use scix_get_paper for full details.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -115,6 +124,15 @@
             "description": "SciX/ADS search query. Supports Solr syntax: field:value, AND/OR/NOT, wildcards. Examples: \"black holes AND galaxy\", \"author:Einstein\", \"abs:dark matter year:2020-2024\"",
             "maxLength": 1000,
             "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
             "type": "string"
           },
           "rows": {
@@ -154,23 +172,55 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "authors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "bibcode": {
+                  "type": "string"
+                },
+                "citation_count": {
+                  "type": "number"
+                },
+                "pub": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "authors"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
-          "text": {
-            "type": "string"
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "total",
+          "start",
+          "items"
         ],
         "type": "object"
-      }
+      },
+      "title": "Search SciX / ADS"
     },
     {
       "annotations": {
@@ -178,13 +228,31 @@
         "readOnlyHint": true
       },
       "description": "Get full metadata and abstract for a paper in SciX/ADS by its bibcode, arXiv ID, or DOI.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "bibcode": {
-            "description": "SciX/ADS bibcode identifier. Example: \"2019ApJ...882L..24A\". Also accepts arXiv IDs like \"arXiv:2103.01231\" or DOIs.",
-            "maxLength": 19,
+            "description": "SciX/ADS bibcode identifier. Example: \"2019ApJ...882L..24A\". Also accepts arXiv IDs like \"arXiv:2103.01231\", DOIs like \"10.1093/mnras/stab1234\", or \"scix:...\" ids.",
+            "maxLength": 200,
             "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
             "type": "string"
           }
         },
@@ -198,23 +266,54 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
+          "abstract": {
             "type": "string"
           },
-          "text": {
+          "arxiv_id": {
+            "type": "string"
+          },
+          "author_count": {
+            "type": "number"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "bibcode": {
+            "type": "string"
+          },
+          "citation_count": {
+            "type": "number"
+          },
+          "doi": {
+            "type": "string"
+          },
+          "pub": {
+            "type": "string"
+          },
+          "read_count": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "year": {
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "text"
+          "title",
+          "authors",
+          "author_count"
         ],
         "type": "object"
-      }
+      },
+      "title": "Get SciX paper"
     },
     {
       "annotations": {
@@ -222,12 +321,21 @@
         "readOnlyHint": true
       },
       "description": "Get papers that cite a given SciX/ADS paper (citations), or papers it cites (references).",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "bibcode": {
-            "description": "SciX/ADS bibcode of the paper",
-            "maxLength": 19,
+            "description": "SciX/ADS bibcode (or arXiv id / DOI) of the paper",
+            "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
@@ -237,6 +345,15 @@
             "enum": [
               "citations",
               "references"
+            ],
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
             ],
             "type": "string"
           },
@@ -258,23 +375,156 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "authors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "bibcode": {
+                  "type": "string"
+                },
+                "citation_count": {
+                  "type": "number"
+                },
+                "pub": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "authors"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
-          "text": {
-            "type": "string"
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "total",
+          "start",
+          "items"
         ],
         "type": "object"
-      }
+      },
+      "title": "Get citations or references"
+    },
+    {
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Find papers with similar content to a given SciX/ADS paper using its bibcode. Uses the SciX similar() operator to surface related work.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "bibcode": {
+            "description": "SciX/ADS bibcode (or arXiv id / DOI) of the seed paper. The API finds papers with similar content.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "default": 10,
+            "description": "Number of similar papers to return",
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bibcode"
+        ],
+        "type": "object"
+      },
+      "name": "scix_find_similar",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "authors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "bibcode": {
+                  "type": "string"
+                },
+                "citation_count": {
+                  "type": "number"
+                },
+                "pub": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "authors"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "start",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Find similar papers"
     },
     {
       "annotations": {
@@ -282,6 +532,15 @@
         "readOnlyHint": true
       },
       "description": "Compute citation metrics (h-index, g-index, i10-index, citation counts) for a set of papers.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -295,6 +554,15 @@
             "maxItems": 100,
             "minItems": 1,
             "type": "array"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -307,23 +575,37 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "basic_stats": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
           },
-          "text": {
-            "type": "string"
+          "citation_stats": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "indicators": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "papers_requested": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "papers_requested"
         ],
         "type": "object"
-      }
+      },
+      "title": "Citation metrics"
     },
     {
       "annotations": {
@@ -331,6 +613,15 @@
         "readOnlyHint": true
       },
       "description": "Export a list of papers in a bibliography format. Supports BibTeX, RIS (Zotero/Mendeley), EndNote, AASTeX, IEEE, MNRAS, and 18 other formats. Pass bibcodes from scix_search results. Ideal for building reference lists.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -400,6 +691,15 @@
             "minimum": -9007199254740991,
             "type": "integer"
           },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
           "sort": {
             "description": "Sort order for the exported bibliography, e.g. \"date desc\"",
             "type": "string"
@@ -415,23 +715,121 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
+          "count": {
+            "type": "number"
+          },
+          "export": {
             "type": "string"
           },
-          "text": {
+          "format": {
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "text"
+          "format",
+          "count",
+          "export"
         ],
         "type": "object"
-      }
+      },
+      "title": "Export bibliography"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Search SciX help docs, search syntax guides, and usage notes.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "default": 5,
+            "description": "Number of results (max 20)",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "Search SciX help docs, syntax guides, and usage notes. Use this to find field syntax, tool usage, and feature explanations.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "scix_search_docs",
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "score": {
+                  "type": "number"
+                },
+                "section": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "source_url": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "source_url",
+                "score",
+                "snippet"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "start",
+          "items"
+        ],
+        "type": "object"
+      },
+      "title": "Search SciX docs"
     },
     {
       "annotations": {
@@ -439,6 +837,15 @@
         "readOnlyHint": true
       },
       "description": "List your SciX personal libraries (saved paper collections). Returns library IDs, names, paper counts, and permissions.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -451,6 +858,15 @@
               "collaborator"
             ],
             "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
           }
         },
         "type": "object"
@@ -460,23 +876,57 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "date_last_modified": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "num_documents": {
+                  "type": "number"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "permission": {
+                  "type": "string"
+                },
+                "public": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
-          "text": {
-            "type": "string"
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "total",
+          "start",
+          "items"
         ],
         "type": "object"
-      }
+      },
+      "title": "List SciX libraries"
     },
     {
       "annotations": {
@@ -484,12 +934,30 @@
         "readOnlyHint": true
       },
       "description": "Get the contents and metadata of a specific SciX library by its ID.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "library_id": {
             "description": "Library identifier (from scix_library_list)",
             "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
             "type": "string"
           }
         },
@@ -503,23 +971,53 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "documents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
-          "text": {
-            "type": "string"
+          "library": {
+            "additionalProperties": false,
+            "properties": {
+              "date_last_modified": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "num_documents": {
+                "type": "number"
+              },
+              "owner": {
+                "type": "string"
+              },
+              "permission": {
+                "type": "string"
+              },
+              "public": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
           }
         },
         "required": [
-          "status",
-          "text"
+          "library",
+          "documents"
         ],
         "type": "object"
-      }
+      },
+      "title": "Get SciX library"
     },
     {
       "annotations": {
@@ -529,6 +1027,15 @@
         "readOnlyHint": false
       },
       "description": "Create a new personal library in SciX to save and organize papers.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -554,6 +1061,15 @@
             "default": false,
             "description": "Whether the library is publicly visible",
             "type": "boolean"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -566,32 +1082,42 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
+          "id": {
             "type": "string"
           },
-          "text": {
+          "name": {
             "type": "string"
+          },
+          "papers_added": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "id",
+          "name",
+          "papers_added"
         ],
         "type": "object"
-      }
+      },
+      "title": "Create SciX library"
     },
     {
       "annotations": {
         "destructiveHint": true,
-        "idempotentHint": false,
+        "idempotentHint": true,
         "openWorldHint": true,
         "readOnlyHint": false
       },
       "description": "Add or remove papers from a SciX library. Pass bibcodes and \"add\" or \"remove\".",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -617,6 +1143,15 @@
             "description": "Library identifier",
             "minLength": 1,
             "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -631,134 +1166,46 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
+          "action": {
             "enum": [
-              "success",
-              "error"
+              "add",
+              "remove"
             ],
             "type": "string"
           },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "text"
-        ],
-        "type": "object"
-      }
-    },
-    {
-      "annotations": {
-        "openWorldHint": true,
-        "readOnlyHint": true
-      },
-      "description": "Find papers with similar content to a given SciX/ADS paper using its bibcode. Uses the SciX similar() operator to surface related work.",
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "bibcode": {
-            "description": "SciX/ADS bibcode of the seed paper. The API finds papers with similar content.",
-            "maxLength": 19,
-            "minLength": 1,
-            "type": "string"
+          "changed": {
+            "type": "number"
           },
-          "rows": {
-            "default": 10,
-            "description": "Number of similar papers to return",
-            "maximum": 50,
-            "minimum": 1,
-            "type": "integer"
+          "library_id": {
+            "type": "string"
           }
         },
         "required": [
-          "bibcode"
+          "library_id",
+          "action",
+          "changed"
         ],
         "type": "object"
       },
-      "name": "scix_find_similar",
-      "outputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "text"
-        ],
-        "type": "object"
-      }
-    },
-    {
-      "annotations": {
-        "openWorldHint": false,
-        "readOnlyHint": true
-      },
-      "description": "Search SciX help docs, search syntax guides, and usage notes.",
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "limit": {
-            "default": 5,
-            "description": "Number of results (max 20)",
-            "maximum": 20,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "query": {
-            "description": "Search SciX help docs, syntax guides, and usage notes. Use this to find field syntax, tool usage, and feature explanations.",
-            "maxLength": 500,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "query"
-        ],
-        "type": "object"
-      },
-      "name": "scix_search_docs",
-      "outputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "text"
-        ],
-        "type": "object"
-      }
+      "title": "Add or remove library papers"
     },
     {
       "annotations": {
         "destructiveHint": true,
-        "idempotentHint": false,
+        "idempotentHint": true,
         "openWorldHint": true,
         "readOnlyHint": false
       },
       "description": "Get, set, or delete a personal annotation note for a paper in a SciX library.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZjRlNzkiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5TeDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -773,7 +1220,7 @@
           },
           "bibcode": {
             "description": "Bibcode of the paper to annotate",
-            "maxLength": 19,
+            "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
@@ -786,6 +1233,15 @@
           "library_id": {
             "description": "Library identifier",
             "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
             "type": "string"
           }
         },
@@ -801,23 +1257,35 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
+          "action": {
             "enum": [
-              "success",
-              "error"
+              "get",
+              "set",
+              "delete"
             ],
             "type": "string"
           },
-          "text": {
+          "bibcode": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "date_last_modified": {
+            "type": "string"
+          },
+          "library_id": {
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "text"
+          "library_id",
+          "bibcode",
+          "action"
         ],
         "type": "object"
-      }
+      },
+      "title": "Library paper note"
     },
     {
       "annotations": {
@@ -825,6 +1293,15 @@
         "readOnlyHint": true
       },
       "description": "Search arXiv preprint server across all scientific disciplines. Supports field prefixes (ti:, au:, abs:, cat:), date ranges, and category filters.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -858,6 +1335,15 @@
             "minLength": 1,
             "type": "string"
           },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "type": "string"
+          },
           "sort_by": {
             "default": "relevance",
             "description": "Sort criterion",
@@ -888,23 +1374,62 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
-            "type": "string"
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "abs_url": {
+                  "type": "string"
+                },
+                "arxiv_id": {
+                  "type": "string"
+                },
+                "authors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "categories": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "published": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "arxiv_id",
+                "title",
+                "authors",
+                "published",
+                "categories",
+                "abs_url"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
-          "text": {
-            "type": "string"
+          "start": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
           }
         },
         "required": [
-          "status",
-          "text"
+          "total",
+          "start",
+          "items"
         ],
         "type": "object"
-      }
+      },
+      "title": "Search arXiv"
     },
     {
       "annotations": {
@@ -912,12 +1437,30 @@
         "readOnlyHint": true
       },
       "description": "Get full metadata and abstract for a specific arXiv paper by its ID (e.g. \"2103.01231\"). Returns title, authors, abstract, categories, and links to PDF and HTML versions.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "paper_id": {
-            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"cs.LG/0612056\". Do NOT include the full URL — just the ID.",
+            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"astro-ph/0601001\", optionally with an \"arXiv:\" prefix or an arxiv.org/abs URL.",
             "minLength": 1,
+            "type": "string"
+          },
+          "response_format": {
+            "default": "markdown",
+            "description": "\"markdown\" (default, human-readable) or \"json\" (the structured result as JSON text)",
+            "enum": [
+              "markdown",
+              "json"
+            ],
             "type": "string"
           }
         },
@@ -931,50 +1474,111 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
+          "abs_url": {
             "type": "string"
           },
-          "text": {
+          "abstract": {
+            "type": "string"
+          },
+          "arxiv_id": {
+            "type": "string"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "doi": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "pdf_url": {
+            "type": "string"
+          },
+          "published": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated": {
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "text"
+          "arxiv_id",
+          "title",
+          "authors",
+          "published",
+          "categories",
+          "abs_url",
+          "updated",
+          "abstract",
+          "pdf_url",
+          "html_url"
         ],
         "type": "object"
-      }
+      },
+      "title": "Get arXiv paper"
     },
     {
+      "_meta": {
+        "anthropic/maxResultSizeChars": 200000
+      },
       "annotations": {
         "openWorldHint": true,
         "readOnlyHint": true
       },
-      "description": "Fetch a paper from arXiv and extract its full text from the HTML rendering or source archive as markdown-ready text.",
+      "description": "Fetch a paper from arXiv and extract its full text as markdown-ready text, paginated with offset/max_chars. source \"auto\" tries the HTML rendering, then the LaTeX source, then the PDF; \"html\", \"latex\" or \"pdf\" force one. The text is untrusted external content and is returned behind a warning banner.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "max_chars": {
-            "default": 12000,
-            "description": "Maximum extracted-text characters to return in this response. Default 12000 to stay under MCP client output limits.",
-            "maximum": 50000,
+            "default": 30000,
+            "description": "Maximum extracted-text characters to return in this response (default 30000, max 150000).",
+            "maximum": 150000,
             "minimum": 1000,
             "type": "integer"
           },
           "offset": {
             "default": 0,
-            "description": "Character offset into the extracted paper text. Use the next offset shown in the previous response to continue reading.",
+            "description": "Character offset into the extracted paper text. Use next_offset from the previous response to continue reading.",
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
           },
           "paper_id": {
-            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"cs.LG/0612056\". Do NOT include the full URL.",
+            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"astro-ph/0601001\", optionally with an \"arXiv:\" prefix or an arxiv.org/abs URL.",
             "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "default": "auto",
+            "description": "\"auto\" (default) tries the arXiv HTML rendering, then the LaTeX source, then the PDF. Name a source to force it; a forced source fails instead of falling back.",
+            "enum": [
+              "auto",
+              "html",
+              "latex",
+              "pdf"
+            ],
             "type": "string"
           }
         },
@@ -988,80 +1592,51 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
         "properties": {
-          "status": {
-            "enum": [
-              "success",
-              "error"
-            ],
+          "arxiv_id": {
             "type": "string"
           },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "text"
-        ],
-        "type": "object"
-      }
-    },
-    {
-      "annotations": {
-        "openWorldHint": true,
-        "readOnlyHint": true
-      },
-      "description": "Download a paper from arXiv and extract full text from the PDF. Directly fetches and processes the PDF file.",
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "max_chars": {
-            "default": 12000,
-            "description": "Maximum extracted-text characters to return in this response. Default 12000 to stay under MCP client output limits.",
-            "maximum": 50000,
-            "minimum": 1000,
-            "type": "integer"
+          "next_offset": {
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "offset": {
-            "default": 0,
-            "description": "Character offset into the extracted PDF text. Use the next offset shown in the previous response to continue reading.",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
+            "type": "number"
           },
-          "paper_id": {
-            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"cs.LG/0612056\". Do NOT include the full URL.",
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "paper_id"
-        ],
-        "type": "object"
-      },
-      "name": "arxiv_download_paper",
-      "outputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "status": {
+          "returned_chars": {
+            "type": "number"
+          },
+          "source": {
             "enum": [
-              "success",
-              "error"
+              "html",
+              "latex",
+              "pdf",
+              "abstract"
             ],
             "type": "string"
           },
-          "text": {
+          "source_name": {
+            "type": "string"
+          },
+          "total_chars": {
+            "type": "number"
+          },
+          "version": {
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "text"
+          "arxiv_id",
+          "source",
+          "offset",
+          "next_offset",
+          "total_chars",
+          "returned_chars"
         ],
         "type": "object"
-      }
+      },
+      "title": "Read arXiv paper"
     },
     {
       "annotations": {
@@ -1069,11 +1644,20 @@
         "readOnlyHint": true
       },
       "description": "Return papers citing an arXiv paper and papers it references using Semantic Scholar citation graph data.",
+      "icons": [
+        {
+          "mimeType": "image/svg+xml",
+          "sizes": [
+            "any"
+          ],
+          "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiNiMzFiMWIiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIj5hWDwvdGV4dD48L3N2Zz4="
+        }
+      ],
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "paper_id": {
-            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"cs.LG/0612056\". Do NOT include the full URL.",
+            "description": "arXiv paper ID. Accepted formats: \"2103.01231\", \"2103.01231v2\", \"astro-ph/0601001\", optionally with an \"arXiv:\" prefix or an arxiv.org/abs URL.",
             "minLength": 1,
             "type": "string"
           }
@@ -1231,7 +1815,8 @@
           "paper_id"
         ],
         "type": "object"
-      }
+      },
+      "title": "arXiv citation graph"
     }
   ]
 }

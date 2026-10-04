@@ -2,6 +2,7 @@ import { PDFParse } from 'pdf-parse';
 import { gunzipSync } from 'node:zlib';
 
 import { ARXIV_API_URL, REQUEST_TIMEOUT } from '../config.js';
+import { arxivIdWithVersion, normalizeArxivId, type ArxivId } from '../ids.js';
 
 export interface ArxivPaper {
   id: string;
@@ -17,11 +18,15 @@ export interface ArxivPaper {
   absUrl: string;
 }
 
+export type ArxivReadSource = 'html' | 'latex' | 'pdf' | 'abstract' | 'unavailable';
+
 export interface ArxivReadPaperResult {
   paper: ArxivPaper | null;
   content: string;
-  source: 'html' | 'tex' | 'pdf' | 'abstract' | 'unavailable';
+  source: ArxivReadSource;
   sourceName?: string;
+  /** Version that was requested, e.g. "v2"; undefined means latest. */
+  version?: string;
 }
 
 interface TarEntry {
@@ -36,11 +41,6 @@ const PREFERRED_TEX_FILENAMES = [
   'article.tex',
   'ms.tex',
 ];
-
-export interface ArxivFullTextPaper {
-  paper: ArxivPaper;
-  fullText: string;
-}
 
 export interface ArxivSearchOptions {
   maxResults?: number;
@@ -99,9 +99,22 @@ function parseAtomFeed(xml: string): ArxivPaper[] {
   return papers;
 }
 
-/** Convert YYYY-MM-DD → YYYYMM for arXiv date range format. */
-function toArxivDate(date: string): string {
-  return date.replace(/-/g, '').slice(0, 6);
+/**
+ * Convert YYYY-MM or YYYY-MM-DD to the arXiv `submittedDate` format YYYYMMDDHHMM.
+ * A month-only input maps to the first (`start`) or last (`end`) day of that month.
+ */
+export function toArxivDate(date: string, edge: 'start' | 'end'): string {
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(date);
+  if (!m) throw new Error(`Invalid date ${JSON.stringify(date)}: expected YYYY-MM or YYYY-MM-DD`);
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const day = m[3] ? Number(m[3]) : edge === 'start' ? 1 : daysInMonth;
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth) {
+    throw new Error(`Invalid date ${JSON.stringify(date)}: no such calendar day`);
+  }
+  const ymd = `${m[1]}${m[2]}${String(day).padStart(2, '0')}`;
+  return `${ymd}${edge === 'start' ? '0000' : '2359'}`;
 }
 
 /**
@@ -116,9 +129,10 @@ function buildArxivUrl(
   const parts: string[] = [query];
 
   if (opts.dateFrom || opts.dateTo) {
-    const from = opts.dateFrom ? toArxivDate(opts.dateFrom) : '*';
-    const to = opts.dateTo ? toArxivDate(opts.dateTo) : '*';
-    parts.push(`submittedDate:[${from}* TO ${to}*]`);
+    // Open ends use explicit bounds: arXiv documents only closed numeric ranges.
+    const from = opts.dateFrom ? toArxivDate(opts.dateFrom, 'start') : '000101010000';
+    const to = opts.dateTo ? toArxivDate(opts.dateTo, 'end') : '999912312359';
+    parts.push(`submittedDate:[${from} TO ${to}]`);
   }
 
   if (opts.categories?.length) {
@@ -184,8 +198,8 @@ export async function arxivSearch(
 }
 
 export async function arxivGetPaper(paperId: string): Promise<ArxivPaper | null> {
-  const cleanId = paperId.replace(/v\d+$/, '');
-  const url = `${ARXIV_API_URL}?id_list=${cleanId}&max_results=1`;
+  const { base } = normalizeArxivId(paperId);
+  const url = `${ARXIV_API_URL}?id_list=${base}&max_results=1`;
   const papers = await fetchAtom(url);
   return papers[0] ?? null;
 }
@@ -335,13 +349,12 @@ function looksLikeFullPaperText(text: string, abstract = ''): boolean {
   return text.length >= minLength || paragraphCount >= 8 || /\b(introduction|related work|method|results|discussion|conclusion|references)\b/.test(compact);
 }
 
-async function fetchHtmlPaper(paperId: string): Promise<string | null> {
-  const cleanId = paperId.replace(/v\d+$/, '');
+async function fetchHtmlPaper(urlId: string): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(`https://arxiv.org/html/${cleanId}`, { signal: controller.signal });
+    const res = await fetch(`https://arxiv.org/html/${urlId}`, { signal: controller.signal });
     if (!res.ok) return null;
     return await res.text();
   } catch {
@@ -351,13 +364,12 @@ async function fetchHtmlPaper(paperId: string): Promise<string | null> {
   }
 }
 
-async function fetchSourceArchive(paperId: string): Promise<Buffer | null> {
-  const cleanId = paperId.replace(/v\d+$/, '');
+async function fetchSourceArchive(urlId: string): Promise<Buffer | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const res = await fetch(`https://arxiv.org/e-print/${cleanId}`, { signal: controller.signal });
+    const res = await fetch(`https://arxiv.org/e-print/${urlId}`, { signal: controller.signal });
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
     return Buffer.from(bytes);
@@ -370,50 +382,59 @@ async function fetchSourceArchive(paperId: string): Promise<Buffer | null> {
 
 function makeReadResult(
   paper: ArxivPaper,
-  source: 'html' | 'tex' | 'pdf' | 'abstract' | 'unavailable',
+  source: ArxivReadSource,
   content: string,
+  version: string | undefined,
   sourceName?: string,
 ): ArxivReadPaperResult {
-  return { paper, source, content, sourceName };
+  return { paper, source, content, sourceName, version };
 }
 
-export async function arxivReadPaper(paperId: string): Promise<ArxivReadPaperResult> {
-  const paper = await arxivGetPaper(paperId);
+export type ArxivReadRequest = 'auto' | 'html' | 'latex' | 'pdf';
+
+/**
+ * Full text of a paper. `auto` tries HTML, then the LaTeX source, then the PDF, then falls
+ * back to the abstract. An explicit source never falls back: it throws when unavailable.
+ */
+export async function arxivReadPaper(
+  paperId: string,
+  source: ArxivReadRequest = 'auto'
+): Promise<ArxivReadPaperResult> {
+  const id: ArxivId = normalizeArxivId(paperId);
+  const urlId = arxivIdWithVersion(id);
+  const paper = await arxivGetPaper(id.base);
   if (!paper) {
     return { paper: null, content: '', source: 'unavailable' };
   }
+  const { version } = id;
 
-  const html = await fetchHtmlPaper(paper.id);
-  if (html) {
-    const htmlText = extractHtmlText(html);
-    if (looksLikeFullPaperText(htmlText, paper.abstract)) {
-      return makeReadResult(paper, 'html', htmlText);
+  if (source === 'auto' || source === 'html') {
+    const html = await fetchHtmlPaper(urlId);
+    if (html) {
+      const htmlText = extractHtmlText(html);
+      if (source === 'html' ? htmlText : looksLikeFullPaperText(htmlText, paper.abstract)) {
+        return makeReadResult(paper, 'html', htmlText, version);
+      }
     }
+    if (source === 'html') throw new Error(`No HTML rendering available for ${urlId}. Try source="latex" or "pdf".`);
   }
 
-  const archive = await fetchSourceArchive(paper.id);
-  if (archive) {
-    const texResult = extractTexText(archive);
+  if (source === 'auto' || source === 'latex') {
+    const archive = await fetchSourceArchive(urlId);
+    const texResult = archive ? extractTexText(archive) : null;
     if (texResult?.text) {
-      return makeReadResult(paper, 'tex', texResult.text, texResult.sourceName);
+      return makeReadResult(paper, 'latex', texResult.text, version, texResult.sourceName);
     }
+    if (source === 'latex') throw new Error(`No LaTeX source available for ${urlId}. Try source="html" or "pdf".`);
   }
 
-  const pdfResult = await arxivGetPaperFullText(paper.id);
-  if (pdfResult?.fullText) {
-    return makeReadResult(paper, 'pdf', pdfResult.fullText);
+  if (source === 'auto' || source === 'pdf') {
+    const pdfText = await fetchPdfText(`https://arxiv.org/pdf/${urlId}.pdf`);
+    if (pdfText) {
+      return makeReadResult(paper, 'pdf', pdfText, version);
+    }
+    if (source === 'pdf') throw new Error(`No text could be extracted from the PDF of ${urlId}.`);
   }
 
-  return makeReadResult(paper, 'abstract', paper.abstract);
-}
-
-export async function arxivGetPaperFullText(paperId: string): Promise<ArxivFullTextPaper | null> {
-  const paper = await arxivGetPaper(paperId);
-
-  if (!paper) {
-    return null;
-  }
-
-  const fullText = await fetchPdfText(`https://arxiv.org/pdf/${paper.id}.pdf`);
-  return { paper, fullText };
+  return makeReadResult(paper, 'abstract', paper.abstract, version);
 }

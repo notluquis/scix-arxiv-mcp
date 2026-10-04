@@ -1,4 +1,5 @@
-import type { ArxivPaper, ArxivReadPaperResult } from './clients/arxiv.js';
+import type { ArxivPaper, ArxivReadPaperResult, ArxivReadSource } from './clients/arxiv.js';
+import { UNTRUSTED_BANNER, type Page } from './content.js';
 import type { SciXDocSearchResult } from './clients/scix_docs.js';
 
 // ── SciX formatters ──────────────────────────────────────────────────────────
@@ -94,58 +95,35 @@ export function formatArxivList(papers: ArxivPaper[]): string {
   return result;
 }
 
-interface FullTextFormatOptions {
-  offset?: number;
-  maxChars?: number;
+function formatPaginationNote(page: Page): string {
+  const end = page.offset + page.slice.length;
+  const range = `_Showing characters ${page.offset}-${end} of ${page.total_chars}._`;
+  if (page.next_offset === null) return `\n\n${range}`;
+  return `\n\n${range}\n_More text is available. Call this tool again with \`offset=${page.next_offset}\` to continue._`;
 }
 
-const DEFAULT_FULL_TEXT_CHARS = 12_000;
+const SOURCE_LABELS: Record<ArxivReadSource, string> = {
+  latex: 'arXiv source archive',
+  html: 'arXiv HTML',
+  pdf: 'arXiv PDF',
+  abstract: 'Abstract fallback',
+  unavailable: 'Unavailable',
+};
 
-function sliceFullText(text: string, options: FullTextFormatOptions = {}) {
-  const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const maxChars = Math.max(1, Math.floor(options.maxChars ?? DEFAULT_FULL_TEXT_CHARS));
-  const totalChars = text.length;
-  const end = Math.min(totalChars, offset + maxChars);
-
-  return {
-    text: text.slice(offset, end),
-    offset,
-    end,
-    totalChars,
-    hasMore: end < totalChars,
-  };
-}
-
-function formatPaginationNote(slice: ReturnType<typeof sliceFullText>): string {
-  if (!slice.hasMore) {
-    return `\n\n_Showing characters ${slice.offset}-${slice.end} of ${slice.totalChars}._`;
-  }
-
-  return [
-    '',
-    '',
-    `_Showing characters ${slice.offset}-${slice.end} of ${slice.totalChars}._`,
-    `_More text is available. Call this tool again with \`offset=${slice.end}\` to continue._`,
-  ].join('\n');
-}
-
-export function formatArxivReadPaper(
-  result: ArxivReadPaperResult,
-  options: FullTextFormatOptions = {}
-): string {
-  if (!result.paper) {
-    return 'No paper found.';
-  }
-
+/** Paper header + one page of extracted text, behind the untrusted-content banner. */
+export function formatArxivReadPaper(result: ArxivReadPaperResult, page: Page): string {
   const paper = result.paper;
+  if (!paper) return 'No paper found.';
+
   const authorStr = paper.authors.length > 3
     ? `${paper.authors.slice(0, 3).join(', ')} et al.`
     : paper.authors.join(', ');
 
-  let output = `# ${paper.title}\n\n`;
+  let output = `${UNTRUSTED_BANNER}\n\n`;
+  output += `# ${paper.title}\n\n`;
   output += `**Authors:** ${authorStr || 'N/A'}\n\n`;
-  output += `**arXiv ID:** \`${paper.id}\`\n\n`;
-  output += `**Source:** ${result.source === 'tex' ? 'arXiv source archive' : result.source === 'html' ? 'arXiv HTML' : result.source === 'pdf' ? 'arXiv PDF' : 'Abstract fallback'}\n\n`;
+  output += `**arXiv ID:** \`${paper.id}\`${result.version ? ` (${result.version})` : ''}\n\n`;
+  output += `**Source:** ${SOURCE_LABELS[result.source]}\n\n`;
   if (result.sourceName) {
     output += `**Source file:** \`${result.sourceName}\`\n\n`;
   }
@@ -153,39 +131,9 @@ export function formatArxivReadPaper(
   if (paper.doi) {
     output += `**DOI:** https://doi.org/${paper.doi}\n\n`;
   }
-  const content = result.content.trim();
-  const slice = sliceFullText(content, options);
-  output += `## Extracted text\n\n${slice.text.trim()}${formatPaginationNote(slice)}\n`;
+  output += `## Extracted text\n\n${page.slice.trim()}${formatPaginationNote(page)}\n`;
 
   return output.trim() + '\n';
-}
-
-export function formatArxivFullText(
-  p: ArxivPaper,
-  fullText: string,
-  options: FullTextFormatOptions = {}
-): string {
-  const authorStr = p.authors.length > 3
-    ? `${p.authors.slice(0, 3).join(', ')} et al.`
-    : p.authors.join(', ');
-
-  const date = p.published.slice(0, 10);
-
-  let result = `# ${p.title}\n\n`;
-  result += `**Authors:** ${authorStr || 'N/A'}\n\n`;
-  result += `**arXiv ID:** \`${p.id}\`\n\n`;
-  result += `**Published:** ${date}\n\n`;
-  result += `**Links:** [Abstract](${p.absUrl}) | [PDF](${p.pdfUrl}) | [HTML](${p.htmlUrl})\n\n`;
-  result += `## Abstract\n\n${p.abstract}\n\n`;
-  const content = fullText.trim();
-  if (content) {
-    const slice = sliceFullText(content, options);
-    result += `## Full text\n\n${slice.text.trim()}${formatPaginationNote(slice)}\n\n`;
-  } else {
-    result += '## Full text\n\n_No text could be extracted from the PDF._\n\n';
-  }
-
-  return result;
 }
 
 export function formatScixDocsResults(results: SciXDocSearchResult[], query: string): string {

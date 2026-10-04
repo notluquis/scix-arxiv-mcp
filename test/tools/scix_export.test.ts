@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ScixClient } from '../../src/clients/scix.js';
-import { handleScixExport } from '../../src/tools/scix_export.js';
+import { handleScixExport } from '../../src/tools/scix.js';
 import { mockFetch, restoreFetch } from '../helpers/mockFetch.js';
 
 describe('handleScixExport', () => {
@@ -17,7 +17,7 @@ describe('handleScixExport', () => {
       format: 'bibtex',
     });
 
-    expect(result).toBe(bibtex);
+    expect(result.text).toBe(bibtex);
   });
 
   it('POSTs to export/{format} endpoint', async () => {
@@ -83,6 +83,18 @@ describe('handleScixExport', () => {
 
     const result = await handleScixExport(client, { bibcodes: ['A'], format: 'bibtex' });
 
-    expect(result).toBe('');
+    expect(result.text).toBe('');
+  });
+
+  it('sends the template as format when format="custom" (non-default branch)', async () => {
+    const mock = mockFetch({ body: { export: 'x' } });
+    const client = new ScixClient();
+
+    const result = await handleScixExport(client, { bibcodes: ['A'], format: 'custom', custom_format: '%1H:%Y' });
+
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toContain('export/custom');
+    expect(JSON.parse(init?.body as string).format).toBe('%1H:%Y');
+    expect(result.structured).toEqual({ format: 'custom', count: 1, export: 'x' });
   });
 });
