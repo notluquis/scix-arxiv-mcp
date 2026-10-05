@@ -139,6 +139,15 @@ describe('fetchWithPolicy retries', () => {
     expect(mock).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores X-RateLimit-Reset on a 503 (ADS sends the daily-quota reset on every response)', async () => {
+    const reset = String(Math.ceil(Date.now() / 1000) + 8 * 3600);
+    const mock = stubFetch(res(503, { 'x-ratelimit-reset': reset }), res(200));
+    const p = fetchWithPolicy('https://api.adsabs.harvard.edu/v1/x');
+    await vi.advanceTimersByTimeAsync(2000); // normal backoff, not hours
+    expect((await p).status).toBe(200);
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
   it('fails immediately, naming when to retry, if the wait is over 60 s', async () => {
     const mock = stubFetch(res(429, { 'retry-after': '120' }));
     await expect(fetchWithPolicy('https://api.adsabs.harvard.edu/v1/x')).rejects.toThrow(/120s.*retry after 20\d\d-/);

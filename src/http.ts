@@ -71,7 +71,8 @@ function requestedWaitMs(res: Response, nowMs: number): number | undefined {
     const date = Date.parse(retryAfter);
     if (!Number.isNaN(date)) return Math.max(0, date - nowMs);
   }
-  const reset = Number(res.headers?.get('x-ratelimit-reset')); // ADS: epoch seconds
+  // ADS sends X-RateLimit-Reset (epoch seconds, daily quota) on EVERY response: only a 429 means "wait for it".
+  const reset = res.status === 429 ? Number(res.headers?.get('x-ratelimit-reset')) : 0;
   if (reset > 0) return Math.max(0, reset * 1000 - nowMs);
   return undefined;
 }
