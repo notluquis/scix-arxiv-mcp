@@ -1,0 +1,106 @@
+name: release
+
+# On a v* tag: test, build, then publish a GitHub release and move the `stable` tag.
+#
+# build/ is gitignored on main. `stable` points at a RELEASE COMMIT made off the tag that
+# contains build/ (git add -f), so `npx -y github:notluquis/scix-arxiv-mcp#stable` gets a
+# runnable package without a registry. main is never touched.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Block undeclared egress
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            uploads.github.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # No package cache on purpose: in a publishing job a poisoned cache could end up
+      # inside what is published.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm smoke
+
+      - run: chmod +x build/index.js
+
+      # Release notes come from the CHANGELOG section of this version, so an empty
+      # section fails here instead of publishing a blank release.
+      - name: Extract release notes
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${REF_NAME#v}"
+          # index() and not a regex: the brackets of "## [2.0.0]" would read as a class.
+          awk -v v="## [$VERSION]" '
+            index($0, v) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "CHANGELOG.md has no '## [$VERSION]' section." >&2
+            exit 1
+          fi
+
+      # Release commit off the tag: parent is the tagged commit, content adds build/.
+      # Detached HEAD, so no branch (main included) moves.
+      - name: Create release commit with build/
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # npm (pacote) prepares a git dependency with a full `npm install`, devDependencies
+          # included, whenever scripts.build exists. Make the release commit a plain prebuilt package.
+          npm pkg delete scripts devDependencies
+          git add -f build package.json
+          git commit -m "release: $REF_NAME (build/ included)"
+          git tag -f stable HEAD
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$REF_NAME" --title "$REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+
+      # After the release exists: if publishing failed, `stable` has not moved. The push
+      # uses an explicit URL with the job token instead of persisted checkout credentials.
+      - name: Move stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" refs/tags/stable:refs/tags/stable

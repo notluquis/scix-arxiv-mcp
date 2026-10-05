@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { handleArxivSearch } from '../../src/tools/arxiv_search.js';
+import { handleArxivSearch } from '../../src/tools/arxiv.js';
 import { mockFetch, restoreFetch } from '../helpers/mockFetch.js';
 import { makeAtomFeed, PAPER_1, PAPER_2 } from '../helpers/arxivFixtures.js';
 
@@ -16,10 +16,10 @@ describe('handleArxivSearch', () => {
       sort_order: 'descending',
     });
 
-    expect(result).toContain('Attention Is All You Need');
-    expect(result).toContain('2103.01231');
-    expect(result).toContain('An Image is Worth 16x16 Words');
-    expect(result).toContain('2010.11929');
+    expect(result.text).toContain('Attention Is All You Need');
+    expect(result.text).toContain('2103.01231');
+    expect(result.text).toContain('An Image is Worth 16x16 Words');
+    expect(result.text).toContain('2010.11929');
   });
 
   it('returns not-found message when empty', async () => {
@@ -32,7 +32,7 @@ describe('handleArxivSearch', () => {
       sort_order: 'descending',
     });
 
-    expect(result).toContain('No results found');
+    expect(result.text).toContain('No results found');
   });
 
   it('passes max_results to client', async () => {
@@ -61,6 +61,20 @@ describe('handleArxivSearch', () => {
       sort_order: 'descending',
     });
 
-    expect(result).toContain('https://arxiv.org/abs/2103.01231');
+    expect(result.text).toContain('https://arxiv.org/abs/2103.01231');
+  });
+
+  it('returns structured total, start and items', async () => {
+    mockFetch({ text: makeAtomFeed([PAPER_1, PAPER_2]) });
+
+    const result = await handleArxivSearch({
+      query: 'x', max_results: 10, sort_by: 'relevance', sort_order: 'descending',
+    });
+
+    expect(result.structured).toMatchObject({
+      total: 2,
+      start: 0,
+      items: [{ arxiv_id: '2103.01231', title: 'Attention Is All You Need', categories: ['cs.CL', 'cs.LG'] }, {}],
+    });
   });
 });

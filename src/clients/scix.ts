@@ -1,4 +1,18 @@
-import { SCIX_API_BASE, REQUEST_TIMEOUT, getScixApiKey } from '../config.js';
+import { SCIX_API_BASE, getScixApiKey } from '../config.js';
+import { fetchWithPolicy } from '../http.js';
+
+/** `idempotent: true` marks a read-only POST (e.g. a batch lookup) as safe to retry on 503. */
+export interface WriteOptions {
+  idempotent?: boolean;
+}
+
+/** A non-2xx ADS response. The message keeps the historical `SciX API error <status>: <body>` form. */
+export class ScixApiError extends Error {
+  constructor(readonly status: number, readonly body: string) {
+    super(`SciX API error ${status}: ${body}`);
+    this.name = 'ScixApiError';
+  }
+}
 
 export class ScixClient {
   private readonly apiKey: string;
@@ -18,53 +32,57 @@ export class ScixClient {
       }
     }
 
-    return this.#fetch(url.toString(), { method: 'GET' });
+    return this.#json(await this.#request(url.toString(), { method: 'GET' }));
   }
 
-  async post(endpoint: string, body: unknown): Promise<unknown> {
-    return this.#fetch(`${SCIX_API_BASE}/${endpoint}`, {
+  async post(endpoint: string, body: unknown, opts: WriteOptions = {}): Promise<unknown> {
+    return this.#json(await this.#request(`${SCIX_API_BASE}/${endpoint}`, {
       method: 'POST',
       body: JSON.stringify(body),
-    });
+    }, opts.idempotent ?? false));
+  }
+
+  /** POST whose response body is not guaranteed to be JSON (e.g. a CSV export). */
+  async postText(endpoint: string, body: unknown, opts: WriteOptions = {}): Promise<string> {
+    const res = await this.#request(`${SCIX_API_BASE}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, opts.idempotent ?? false);
+    return res.text();
   }
 
   async put(endpoint: string, body: unknown): Promise<unknown> {
-    return this.#fetch(`${SCIX_API_BASE}/${endpoint}`, {
+    return this.#json(await this.#request(`${SCIX_API_BASE}/${endpoint}`, {
       method: 'PUT',
       body: JSON.stringify(body),
-    });
+    }));
   }
 
   async delete(endpoint: string): Promise<unknown> {
-    return this.#fetch(`${SCIX_API_BASE}/${endpoint}`, { method: 'DELETE' });
+    return this.#json(await this.#request(`${SCIX_API_BASE}/${endpoint}`, { method: 'DELETE' }));
   }
 
-  async #fetch(url: string, init: RequestInit): Promise<unknown> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  async #json(res: Response): Promise<unknown> {
+    // DELETE may return 204 No Content
+    if (res.status === 204) return {};
+    return res.json();
+  }
 
-    try {
-      const res = await fetch(url, {
-        ...init,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          ...init.headers,
-        },
-        signal: controller.signal,
-      });
+  async #request(url: string, init: RequestInit, idempotent = init.method === 'GET'): Promise<Response> {
+    const res = await fetchWithPolicy(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        ...init.headers,
+      },
+    }, { idempotent });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`SciX API error ${res.status}: ${text}`);
-      }
-
-      // DELETE may return 204 No Content
-      if (res.status === 204) return {};
-      return res.json();
-    } finally {
-      clearTimeout(timer);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new ScixApiError(res.status, text);
     }
+    return res;
   }
 }
 

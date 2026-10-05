@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ScixClient } from '../../src/clients/scix.js';
 import {
   handleScixLibraryList,
   handleScixLibraryGet,
   handleScixLibraryCreate,
   handleScixLibraryDocuments,
-} from '../../src/tools/scix_library.js';
+  handleScixLibraryNote,
+} from '../../src/tools/scix_libraries.js';
 import { mockFetch, restoreFetch } from '../helpers/mockFetch.js';
 
 const MOCK_LIB = {
@@ -31,10 +32,10 @@ describe('handleScixLibraryList', () => {
 
     const result = await handleScixLibraryList(client, { filter: 'all' });
 
-    expect(result).toContain('My Astronomy Papers');
-    expect(result).toContain('abc123');
-    expect(result).toContain('3');
-    expect(result).toContain('owner');
+    expect(result.text).toContain('My Astronomy Papers');
+    expect(result.text).toContain('abc123');
+    expect(result.text).toContain('3');
+    expect(result.text).toContain('owner');
   });
 
   it('returns not-found message when empty', async () => {
@@ -43,7 +44,7 @@ describe('handleScixLibraryList', () => {
 
     const result = await handleScixLibraryList(client, { filter: 'all' });
 
-    expect(result).toContain('No libraries found');
+    expect(result.text).toContain('No libraries found');
   });
 
   it('sends access_type param when filter is not "all"', async () => {
@@ -82,9 +83,9 @@ describe('handleScixLibraryGet', () => {
 
     const result = await handleScixLibraryGet(client, { library_id: 'abc123' });
 
-    expect(result).toContain('My Astronomy Papers');
-    expect(result).toContain('2024ApJ...1A');
-    expect(result).toContain('2023ApJ...2B');
+    expect(result.text).toContain('My Astronomy Papers');
+    expect(result.text).toContain('2024ApJ...1A');
+    expect(result.text).toContain('2023ApJ...2B');
   });
 
   it('returns not-found message on empty metadata', async () => {
@@ -93,7 +94,7 @@ describe('handleScixLibraryGet', () => {
 
     const result = await handleScixLibraryGet(client, { library_id: 'nonexistent' });
 
-    expect(result).toContain('not found');
+    expect(result.text).toContain('not found');
   });
 
   it('handles library metadata returned at the root level', async () => {
@@ -107,8 +108,8 @@ describe('handleScixLibraryGet', () => {
 
     const result = await handleScixLibraryGet(client, { library_id: 'abc123' });
 
-    expect(result).toContain('My Astronomy Papers');
-    expect(result).toContain('2024ApJ...1A');
+    expect(result.text).toContain('My Astronomy Papers');
+    expect(result.text).toContain('2024ApJ...1A');
   });
 });
 
@@ -126,9 +127,9 @@ describe('handleScixLibraryCreate', () => {
       bibcodes: ['A', 'B'],
     });
 
-    expect(result).toContain('New Library');
-    expect(result).toContain('new123');
-    expect(result).toContain('2');
+    expect(result.text).toContain('New Library');
+    expect(result.text).toContain('new123');
+    expect(result.text).toContain('2');
   });
 
   it('POSTs to biblib/libraries', async () => {
@@ -163,9 +164,9 @@ describe('handleScixLibraryCreate', () => {
       public: false,
     });
 
-    expect(result).toContain('Metadata Library');
-    expect(result).toContain('meta123');
-    expect(result).toContain('4');
+    expect(result.text).toContain('Metadata Library');
+    expect(result.text).toContain('meta123');
+    expect(result.text).toContain('4');
   });
 });
 
@@ -183,9 +184,9 @@ describe('handleScixLibraryDocuments', () => {
       action: 'add',
     });
 
-    expect(result).toContain('Added');
-    expect(result).toContain('2');
-    expect(result).toContain('abc123');
+    expect(result.text).toContain('Added');
+    expect(result.text).toContain('2');
+    expect(result.text).toContain('abc123');
   });
 
   it('returns confirmation for remove', async () => {
@@ -198,7 +199,7 @@ describe('handleScixLibraryDocuments', () => {
       action: 'remove',
     });
 
-    expect(result).toContain('Removed');
+    expect(result.text).toContain('Removed');
   });
 
   it('POSTs correct action and bibcodes', async () => {
@@ -216,5 +217,136 @@ describe('handleScixLibraryDocuments', () => {
     const body = JSON.parse(init?.body as string);
     expect(body.action).toBe('add');
     expect(body.bibcode).toEqual(['X']);
+  });
+
+  it('rejects a library_id that would retarget the request', async () => {
+    const mock = mockFetch({ body: { number_added: 1 } });
+    const client = new ScixClient();
+
+    await expect(handleScixLibraryDocuments(client, {
+      library_id: '../libraries/other', bibcodes: ['X'], action: 'add',
+    })).rejects.toThrow('Invalid library_id');
+    expect(mock).not.toHaveBeenCalled();
+  });
+});
+
+describe('library id validation and structured output', () => {
+  beforeEach(() => { process.env.SCIX_API_TOKEN = 'test'; });
+  afterEach(restoreFetch);
+
+  it('scix_library_get rejects dot segments and slashes in library_id', async () => {
+    const mock = mockFetch({ body: {} });
+    const client = new ScixClient();
+
+    for (const bad of ['..', '../x', 'a/b', 'a?b=1']) {
+      await expect(handleScixLibraryGet(client, { library_id: bad })).rejects.toThrow('Invalid library_id');
+    }
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('list, get and create return structured records', async () => {
+    mockFetch({ body: { libraries: [MOCK_LIB] } });
+    const list = await handleScixLibraryList(new ScixClient(), { filter: 'all' });
+    expect(list.structured).toMatchObject({ total: 1, start: 0, items: [{ id: 'abc123', name: 'My Astronomy Papers' }] });
+
+    mockFetch({ body: { metadata: MOCK_LIB, documents: ['2024ApJ...1A'] } });
+    const get = await handleScixLibraryGet(new ScixClient(), { library_id: 'abc123' });
+    expect(get.structured).toMatchObject({ library: { id: 'abc123' }, documents: ['2024ApJ...1A'] });
+
+    mockFetch({ body: { id: 'new123', name: 'New', bibcode: ['A', 'B'] } });
+    const created = await handleScixLibraryCreate(new ScixClient(), { name: 'New', public: false });
+    expect(created.structured).toEqual({ id: 'new123', name: 'New', papers_added: 2 });
+  });
+
+  it('create sends description and bibcodes when given (non-default branch)', async () => {
+    const mock = mockFetch({ body: { id: 'x', name: 'X' } });
+
+    await handleScixLibraryCreate(new ScixClient(), {
+      name: 'X', public: false, description: 'about stars', bibcodes: ['A', 'B'],
+    });
+
+    const body = JSON.parse(mock.mock.calls[0][1]?.body as string);
+    // biblib OpenAPI: the create body field is `bibcode` (singular); `bibcodes` is silently ignored (measured live: papers_added 0)
+    expect(body).toMatchObject({ description: 'about stars', bibcode: ['A', 'B'] });
+    expect(body).not.toHaveProperty('bibcodes');
+  });
+});
+
+describe('handleScixLibraryNote', () => {
+  beforeEach(() => { process.env.SCIX_API_TOKEN = 'test'; });
+  afterEach(restoreFetch);
+
+  it('get returns the note', async () => {
+    // Shape from the biblib OpenAPI (GET /biblib/notes/{library_id}/{document_id}): the note is nested.
+    const mock = mockFetch({ body: { document: '2019ApJ...882L..24A', note: { content: 'remember this', date_last_modified: '2024-06-15T00:00:00' } } });
+
+    const result = await handleScixLibraryNote(new ScixClient(), {
+      library_id: 'abc123', bibcode: '2019ApJ...882L..24A', action: 'get',
+    });
+
+    expect(String(mock.mock.calls[0][0])).toContain('biblib/notes/abc123/2019ApJ...882L..24A');
+    expect(result.text).toContain('remember this');
+    expect(result.text).toContain('2024-06-15');
+    expect(result.structured).toMatchObject({ action: 'get', content: 'remember this' });
+  });
+
+  it('set on a paper that already has a note updates it with PUT (live: second POST is 409)', async () => {
+    const methods: string[] = [];
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      methods.push(init?.method ?? 'GET');
+      const conflict = init?.method === 'POST';
+      const body = conflict ? { error: 'Note for this document already exists.' } : { content: 'second' };
+      return { ok: !conflict, status: conflict ? 409 : 200, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body, text: async () => JSON.stringify(body) } as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await handleScixLibraryNote(new ScixClient(), { library_id: 'abc123', bibcode: 'B', action: 'set', content: 'second' });
+
+    expect(methods).toEqual(['POST', 'PUT']);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('get reports a missing note without failing', async () => {
+    // Measured live: a missing note is HTTP 400 with this body, not an empty 200.
+    mockFetch({ status: 400, body: { error: 'Note does not exist for specified document.See the API documentation: http://adsabs.github.io/help/api/' } });
+
+    const result = await handleScixLibraryNote(new ScixClient(), { library_id: 'abc123', bibcode: 'B', action: 'get' });
+
+    expect(result.text).toContain('No note found');
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('set POSTs the content; delete sends DELETE', async () => {
+    const mock = mockFetch({ body: {} });
+    const client = new ScixClient();
+
+    const set = await handleScixLibraryNote(client, { library_id: 'abc123', bibcode: 'B', action: 'set', content: 'hello' });
+    const del = await handleScixLibraryNote(client, { library_id: 'abc123', bibcode: 'B', action: 'delete' });
+
+    expect(set.text).toContain('Note saved');
+    expect(mock.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(mock.mock.calls[0][1]?.body as string)).toEqual({ content: 'hello' });
+    expect(del.text).toContain('Note deleted');
+    expect(mock.mock.calls[1][1]?.method).toBe('DELETE');
+  });
+
+  it('set without content is an error and sends nothing', async () => {
+    const mock = mockFetch({ body: {} });
+
+    const result = await handleScixLibraryNote(new ScixClient(), { library_id: 'abc123', bibcode: 'B', action: 'set' });
+
+    expect(result.isError).toBe(true);
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('rejects path-breaking library_id and bibcode, and encodes the bibcode', async () => {
+    const mock = mockFetch({ body: {} });
+    const client = new ScixClient();
+
+    await expect(handleScixLibraryNote(client, { library_id: '../x', bibcode: 'B', action: 'get' })).rejects.toThrow('Invalid library_id');
+    await expect(handleScixLibraryNote(client, { library_id: 'abc123', bibcode: '../../x', action: 'delete' })).rejects.toThrow('Invalid bibcode');
+    expect(mock).not.toHaveBeenCalled();
+
+    await handleScixLibraryNote(client, { library_id: 'abc123', bibcode: '2020A&A...641A...6P', action: 'get' });
+    expect(String(mock.mock.calls[0][0])).toContain('biblib/notes/abc123/2020A%26A...641A...6P');
   });
 });

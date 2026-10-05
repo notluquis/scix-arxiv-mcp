@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { arxivSearch, arxivGetPaper } from '../../src/clients/arxiv.js';
+import { arxivSearch, arxivGetPaper, arxivReadPaper } from '../../src/clients/arxiv.js';
 import { mockFetch, mockFetchError, restoreFetch } from '../helpers/mockFetch.js';
 import { makeAtomFeed, PAPER_1, PAPER_2 } from '../helpers/arxivFixtures.js';
 
@@ -42,7 +42,7 @@ describe('arxivSearch', () => {
     await arxivSearch('ti:transformers', { maxResults: 5, sortBy: 'submittedDate', sortOrder: 'ascending' });
 
     const [url] = mock.mock.calls[0];
-    expect(url).toContain('search_query=ti%3Atransformers');
+    expect(url).toContain('search_query=(ti%3Atransformers)');
     expect(url).toContain('max_results=5');
     expect(url).toContain('sortBy=submittedDate');
     expect(url).toContain('sortOrder=ascending');
@@ -90,5 +90,27 @@ describe('arxivGetPaper', () => {
     const paper = await arxivGetPaper('9999.00000');
 
     expect(paper).toBeNull();
+  });
+
+  it('accepts an arXiv: prefix, a URL and an old-style id', async () => {
+    const mock = mockFetch({ text: makeAtomFeed([PAPER_1]) });
+
+    await arxivGetPaper('arXiv:2103.01231v2');
+    await arxivGetPaper('https://arxiv.org/abs/2103.01231');
+    await arxivGetPaper('astro-ph/0601001');
+
+    const urls = mock.mock.calls.map(c => String(c[0]));
+    expect(urls[0]).toContain('id_list=2103.01231&');
+    expect(urls[1]).toContain('id_list=2103.01231&');
+    expect(urls[2]).toContain('id_list=astro-ph/0601001&');
+  });
+
+  it('rejects an id that would inject extra query parameters, without any request', async () => {
+    const mock = mockFetch({ text: makeAtomFeed([PAPER_1]) });
+
+    await expect(arxivGetPaper('2103.01231&max_results=999')).rejects.toThrow('Invalid arXiv id');
+    await expect(arxivReadPaper('2103.01231/../../x')).rejects.toThrow('Invalid arXiv id');
+
+    expect(mock).not.toHaveBeenCalled();
   });
 });
