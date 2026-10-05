@@ -277,6 +277,31 @@ describe('scix_resolve_references', () => {
     });
   });
 
+  it('parses the live plain-text body: one "score bibcode -- refstring" line per reference', async () => {
+    const mock = mockFetch({
+      text: '1.0 2012Sci...337..444S -- Sana, H. et al. 2012, Science, 337, 444\n0.0 ....................... -- not a reference',
+      headers: { 'content-type': '' },
+    });
+    const out = await handleScixResolveReferences(new ScixClient(), {
+      references: ['Sana, H. et al. 2012, Science, 337, 444', 'not a reference'],
+    });
+    expect(bodyOf(mock)).toEqual({ reference: ['Sana, H. et al. 2012, Science, 337, 444', 'not a reference'] });
+    expect(out.structured).toEqual({
+      total: 2, start: 0,
+      items: [
+        { reference: 'Sana, H. et al. 2012, Science, 337, 444', bibcode: '2012Sci...337..444S', score: 1 },
+        { reference: 'not a reference', score: 0, comment: 'unresolved: 0.0 ....................... -- not a reference' },
+      ],
+    });
+    expect(out.text).toContain('`2012Sci...337..444S`');
+  });
+
+  it('a plain-text line that does not match the format is reported unresolved with the raw line', async () => {
+    mockFetch({ text: 'something unexpected' });
+    const out = await handleScixResolveReferences(new ScixClient(), { references: ['R'] });
+    expect(out.structured).toEqual({ total: 1, start: 0, items: [{ reference: 'something unexpected', comment: 'unresolved: something unexpected' }] });
+  });
+
   it('accepts the single-object form shown in the OpenAPI spec', async () => {
     mockFetch({ body: { resolved: { refstring: 'R', bibcode: 'B', score: '0.9' } } });
     const out = await handleScixResolveReferences(new ScixClient(), { references: ['R'] });

@@ -316,17 +316,34 @@ export async function handleScixResolveReferences(
   client: ScixClient,
   input: In<typeof scixResolveReferencesSchema>
 ): Promise<ToolOut> {
-  const data = await client.post('reference/text', { reference: input.references }, { idempotent: true });
-  assertNoErrorKey(data, 'ADS reference service');
-  // The OpenAPI example shows one object; accept either one object or a list.
-  const resolved = isRecord(data) ? data['resolved'] : undefined;
-  const list = Array.isArray(resolved) ? resolved : resolved === undefined ? [] : [resolved];
-  const items = list.filter(isRecord).map(r => ({
-    reference: String(r['refstring'] ?? ''),
-    bibcode: r['bibcode'] === undefined || r['bibcode'] === null ? undefined : String(r['bibcode']),
-    score: r['score'] === undefined ? undefined : Number(r['score']),
-    comment: r['comment'] === undefined ? undefined : String(r['comment']),
-  }));
+  // The live service answers HTTP 200 with a PLAIN-TEXT body (empty content-type), one line per reference:
+  //   `1.0 2012Sci...337..444S -- Sana, H. et al. 2012, Science, 337, 444`
+  // The OpenAPI documents JSON ({"resolved": ...}); a body starting with { or [ is still parsed as JSON.
+  const raw = (await client.postText('reference/text', { reference: input.references }, { idempotent: true })).trim();
+  let items: { reference: string; bibcode?: string; score?: number; comment?: string }[];
+  if (raw.startsWith('{') || raw.startsWith('[')) {
+    const data: unknown = JSON.parse(raw);
+    assertNoErrorKey(data, 'ADS reference service');
+    // The OpenAPI example shows one object; accept either one object or a list.
+    const resolved = isRecord(data) ? data['resolved'] : undefined;
+    const list = Array.isArray(resolved) ? resolved : resolved === undefined ? [] : [resolved];
+    items = list.filter(isRecord).map(r => ({
+      reference: String(r['refstring'] ?? ''),
+      bibcode: r['bibcode'] === undefined || r['bibcode'] === null ? undefined : String(r['bibcode']),
+      score: r['score'] === undefined ? undefined : Number(r['score']),
+      comment: r['comment'] === undefined ? undefined : String(r['comment']),
+    }));
+  } else {
+    items = raw.split(/\r?\n/).filter(l => l.trim()).map(line => {
+      const m = /^(\d+(?:\.\d+)?)\s+(\S+)\s+--\s+(.*)$/.exec(line.trim());
+      // ponytail: the failure format is undocumented; anything but a 19-char bibcode counts as unresolved.
+      if (!m) return { reference: line.trim(), comment: `unresolved: ${line.trim()}` };
+      const bibcode = /^\d{4}\S{15}$/.test(m[2]!) ? m[2] : undefined;
+      return bibcode
+        ? { reference: m[3]!, bibcode, score: Number(m[1]) }
+        : { reference: m[3]!, score: Number(m[1]), comment: `unresolved: ${line.trim()}` };
+    });
+  }
   const text = '# Resolved references\n\n' + items.map((i, n) =>
     `${n + 1}. ${i.reference}\n   - ${i.bibcode ? `Bibcode: \`${i.bibcode}\`` : 'not resolved'}` +
     `${i.score !== undefined ? ` (score ${i.score})` : ''}${i.comment ? `\n   - ${i.comment}` : ''}`
