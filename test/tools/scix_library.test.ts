@@ -266,7 +266,9 @@ describe('library id validation and structured output', () => {
     });
 
     const body = JSON.parse(mock.mock.calls[0][1]?.body as string);
-    expect(body).toMatchObject({ description: 'about stars', bibcodes: ['A', 'B'] });
+    // biblib OpenAPI: the create body field is `bibcode` (singular); `bibcodes` is silently ignored (measured live: papers_added 0)
+    expect(body).toMatchObject({ description: 'about stars', bibcode: ['A', 'B'] });
+    expect(body).not.toHaveProperty('bibcodes');
   });
 });
 

@@ -209,7 +209,7 @@ export async function handleScixLibraryCreate(
     public: input.public,
   };
   if (input.description) body['description'] = input.description;
-  if (input.bibcodes?.length) body['bibcodes'] = input.bibcodes;
+  if (input.bibcodes?.length) body['bibcode'] = input.bibcodes; // biblib field is singular
 
   const data = await client.post('biblib/libraries', body) as {
     metadata?: {
@@ -284,8 +284,15 @@ async function confirmDestructive(
     return accepted?.confirm === true ? 'proceed' : 'cancelled';
   }
 
-  const data = await client.get(`biblib/libraries/${id}`) as { metadata?: Partial<LibraryMeta> } & Partial<LibraryMeta>;
-  const meta = data.metadata ?? data;
+  // The lookup only makes the question readable. If it fails (measured: 410 right after `union`
+  // created the library), still ask, naming the id, instead of failing the whole action.
+  let meta: Partial<LibraryMeta> = {};
+  try {
+    const data = await client.get(`biblib/libraries/${id}`) as { metadata?: Partial<LibraryMeta> } & Partial<LibraryMeta>;
+    meta = data.metadata ?? data;
+  } catch {
+    // fall through with the id
+  }
   return inputRequired({
     inputRequests: {
       confirm: inputRequired.elicit({

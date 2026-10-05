@@ -211,6 +211,35 @@ describe('scix_library_operation empty confirmation (input_required)', () => {
   });
 });
 
+describe('confirmation when the library lookup fails', () => {
+  // Measured live: a library just created by `union` answered 410 to the lookup, and the delete failed outright.
+  it('still asks (naming the id) and sends exactly one DELETE', async () => {
+    const c = await connect({ elicitation: true });
+    const asked: string[] = [];
+    c.client.setRequestHandler(ELICIT, async request => {
+      asked.push((request.params as { message: string }).message);
+      return { action: 'accept', content: { confirm: true } };
+    });
+    const calls: Calls = [];
+    global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const path = String(url).replace(/^https:\/\/[^/]+\/v1\//, '');
+      calls.push({ method: init?.method ?? 'GET', path });
+      const status = init?.method === undefined || init.method === 'GET' ? 410 : 200;
+      const body = status === 410 ? { error: 'Library specified does not exist.' } : {};
+      return { ok: status === 200, status, headers: new Headers(), json: async () => body, text: async () => JSON.stringify(body) } as Response;
+    }) as unknown as typeof fetch;
+    try {
+      const result = await c.client.callTool({ name: 'scix_library_delete', arguments: { library_id: 'gone42' } });
+      expect(result.isError).toBeFalsy();
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).toContain('Delete library gone42');
+      expect(count(calls, 'DELETE', 'biblib/documents/gone42')).toBe(1);
+    } finally {
+      await c.close();
+    }
+  });
+});
+
 describe('library management tools over the real protocol', () => {
   it('response_format json is honoured by get_permissions, and the structured result validates', async () => {
     const c = await connect();
