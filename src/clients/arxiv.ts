@@ -216,15 +216,16 @@ function looksLikeFullPaperText(text: string, abstract = ''): boolean {
 
 const MAX_HTML_BYTES = 50 * 1024 * 1024;
 
-/** The page body, or null for any non-2xx or network failure (callers fall back to another source). */
+/**
+ * The page body, or null when the page does not exist (404/410: arXiv has no HTML for that paper).
+ * Anything else (503, "asked to wait", timeout, network) throws, so a transient failure is never
+ * mistaken for "no HTML" and the fallback result is not cached for days.
+ */
 async function fetchHtmlPage(url: string): Promise<string | null> {
-  try {
-    const res = await fetchWithPolicy(url, {}, { maxBytes: MAX_HTML_BYTES });
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
-  }
+  const res = await fetchWithPolicy(url, {}, { maxBytes: MAX_HTML_BYTES });
+  if (res.status === 404 || res.status === 410) return null;
+  if (!res.ok) throw new Error(`${new URL(url).hostname} answered HTTP ${res.status} for ${new URL(url).pathname}; try again later.`);
+  return res.text();
 }
 
 const fetchHtmlPaper = (urlId: string) => fetchHtmlPage(`https://arxiv.org/html/${urlId}`);
@@ -266,10 +267,16 @@ export async function arxivReadPaper(
 
   if (source === 'auto' || source === 'html') {
     await step('Fetching arXiv HTML');
-    const htmlText = await cached('html-tex', urlId, ttl, async () => {
-      const html = await fetchHtmlPaper(urlId);
-      return html ? htmlToText(html) : null;
-    });
+    let htmlText: string | null = null;
+    try {
+      htmlText = await cached('html-tex', urlId, ttl, async () => {
+        const html = await fetchHtmlPaper(urlId);
+        return html ? htmlToText(html) : null;
+      });
+    } catch (e) {
+      if (source === 'html') throw e; // explicit source: surface the transient failure
+      // auto: carry on to LaTeX/PDF; nothing was cached
+    }
     if (htmlText !== null) {
       if (source === 'html' ? htmlText : looksLikeFullPaperText(htmlText, paper.abstract)) {
         return makeReadResult(paper, 'html', htmlText, version);

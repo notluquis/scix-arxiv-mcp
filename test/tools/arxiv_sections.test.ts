@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { cacheDir } from '../../src/cache.js';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { UNTRUSTED_BANNER } from '../../src/content.js';
 import { makeAtomFeed, PAPER_1 } from '../helpers/arxivFixtures.js';
@@ -52,6 +54,18 @@ describe('section tools through the protocol', () => {
     expect(r.isError).toBeFalsy();
     expect(r.structuredContent).toMatchObject({ source: 'ar5iv' });
     expect(calls.some(u => u.startsWith('https://ar5iv.labs.arxiv.org/html/'))).toBe(true);
+  });
+
+  it('a transient 503 on arxiv.org/html is an error and caches nothing; it does not fall back for 30 days', async () => {
+    const calls = mockPages(503, FIXTURE);
+    const r = await c.client.callTool({ name: 'arxiv_get_paper_outline', arguments: { paper_id: ID } });
+    expect(r.isError).toBe(true);
+    expect(calls.some(u => u.includes('ar5iv'))).toBe(false);
+    expect(existsSync(path.join(cacheDir(), 'sections'))).toBe(false);
+    // once arXiv recovers, the real HTML is used
+    mockPages(FIXTURE);
+    const ok = await c.client.callTool({ name: 'arxiv_get_paper_outline', arguments: { paper_id: ID } });
+    expect(ok.structuredContent).toMatchObject({ source: 'html' });
   });
 
   it('read_paper_section: banner, TeX math in the text', async () => {
