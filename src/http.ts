@@ -121,7 +121,17 @@ export async function fetchWithPolicy(
     if (limiter) await limiter();
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-    const res = await fetch(url, { ...init, signal });
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, signal });
+    } catch (e) {
+      // A network error on an idempotent request is retried; a mutation may have reached the
+      // server, and a caller abort means stop.
+      if (!idempotent || init.signal?.aborted || attempt >= retries) throw e;
+      const wait = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt * (1 + Math.random() * 0.25)) * rateScale();
+      if (wait > 0) await defaultSleep(wait);
+      continue;
+    }
 
     if (!retryOn.includes(res.status) || attempt >= retries) {
       return opts.maxBytes !== undefined && res.ok ? enforceMaxBytes(res, opts.maxBytes, url) : res;

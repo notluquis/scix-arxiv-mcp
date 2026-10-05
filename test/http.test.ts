@@ -186,6 +186,32 @@ describe('fetchWithPolicy retries', () => {
     expect(mock).toHaveBeenCalledTimes(2);
   });
 
+  it('a network error on GET is retried (review: fetch rejections were never retried)', async () => {
+    let n = 0;
+    const mock = vi.fn(async () => { n += 1; if (n === 1) throw new TypeError('fetch failed'); return res(200, {}, 'done'); });
+    global.fetch = mock as unknown as typeof fetch;
+    const p = fetchWithPolicy('https://api.adsabs.harvard.edu/v1/x');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await (await p).text()).toBe('done');
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it('a network error on a POST is not retried (the request may have reached the server)', async () => {
+    const mock = vi.fn(async () => { throw new TypeError('fetch failed'); });
+    global.fetch = mock as unknown as typeof fetch;
+    await expect(fetchWithPolicy('https://api.adsabs.harvard.edu/v1/biblib/library', { method: 'POST', body: '{}' })).rejects.toThrow('fetch failed');
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a caller abort is not retried', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const mock = vi.fn(async () => { throw new DOMException('aborted', 'AbortError'); });
+    global.fetch = mock as unknown as typeof fetch;
+    await expect(fetchWithPolicy('https://api.adsabs.harvard.edu/v1/x', { signal: ac.signal })).rejects.toThrow();
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry other statuses', async () => {
     const mock = stubFetch(res(404));
     expect((await fetchWithPolicy('https://api.adsabs.harvard.edu/v1/x')).status).toBe(404);
