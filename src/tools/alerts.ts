@@ -84,12 +84,55 @@ async function save(watches: Watch[]): Promise<void> {
   }
 }
 
-// Serialises read-modify-write within this process (ponytail: no cross-process lock; see cache.ts limiter note).
+// Serialises read-modify-write within this process.
 let chain: Promise<unknown> = Promise.resolve();
 function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   const run = chain.then(fn, fn);
   chain = run.catch(() => undefined);
   return run;
+}
+
+// Cross-process lock (several Claude Code sessions share stateDir()): O_EXCL lockfile with a stale timeout.
+// It is only held around load-merge-save, never across network calls.
+const LOCK_STALE_MS = 30_000;
+const LOCK_WAIT_MS = 10_000;
+const LOCK_POLL_MS = 20;
+
+async function withFileLock<T>(fn: () => Promise<T>): Promise<T> {
+  const lock = `${watchesFile()}.lock`;
+  await fs.mkdir(path.dirname(lock), { recursive: true });
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const fh = await fs.open(lock, 'wx');
+      await fh.writeFile(String(process.pid)).catch(() => undefined);
+      await fh.close();
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      const st = await fs.stat(lock).catch(() => undefined);
+      if (st && Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+        await fs.rm(lock, { force: true });
+        continue;
+      }
+      if (Date.now() > deadline) throw new Error(`watches.json is locked by another process (${lock}); try again.`);
+      await new Promise(r => setTimeout(r, LOCK_POLL_MS));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await fs.rm(lock, { force: true }).catch(() => undefined);
+  }
+}
+
+/** Fold a locally advanced watermark into the freshly loaded copy: the later watermark wins; ties union the seen ids. */
+function mergeWatermark(fresh: Watch, mine: Watch): Watch {
+  const a = Date.parse(fresh.last_checked);
+  const b = Date.parse(mine.last_checked);
+  if (b > a || Number.isNaN(a)) return { ...fresh, last_checked: mine.last_checked, seen_at_watermark: mine.seen_at_watermark };
+  if (b === a) return { ...fresh, seen_at_watermark: [...new Set([...fresh.seen_at_watermark, ...mine.seen_at_watermark])] };
+  return fresh;
 }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
@@ -131,7 +174,7 @@ export const arxivWatchTopicSchema = z.object({
 });
 
 export function handleArxivWatchTopic(input: In<typeof arxivWatchTopicSchema>): Promise<ToolOut> {
-  return exclusive(async () => {
+  return exclusive(() => withFileLock(async () => {
     const { watches, warning } = await load();
     const nowIso = new Date().toISOString();
     const existing = watches.find(w => w.topic === input.topic);
@@ -157,7 +200,7 @@ export function handleArxivWatchTopic(input: In<typeof arxivWatchTopicSchema>): 
       text: withWarning(text, warning),
       structured: { created: !existing, watch: publicWatch(record), ...(warning ? { warning } : {}) },
     };
-  });
+  }));
 }
 
 // ── arxiv_check_alerts ───────────────────────────────────────────────────────
@@ -243,12 +286,12 @@ export function handleArxivCheckAlerts(input: In<typeof arxivCheckAlertsSchema>)
     }
 
     const results: WatchResult[] = [];
-    let dirty = false;
+    const advanced: Watch[] = [];
     for (const w of targets) {
       try {
         const { result, changed } = await checkOne(w);
         results.push(result);
-        dirty ||= changed;
+        if (changed) advanced.push(w);
       } catch (e) {
         results.push({
           topic: w.topic, new_papers: [], more_pending: false, last_checked: w.last_checked,
@@ -256,7 +299,17 @@ export function handleArxivCheckAlerts(input: In<typeof arxivCheckAlertsSchema>)
         });
       }
     }
-    if (dirty) await save(watches);
+    if (advanced.length) {
+      // Another process may have added, removed or advanced watches while we fetched: re-load and merge per topic.
+      await withFileLock(async () => {
+        const fresh = (await load()).watches;
+        for (const mine of advanced) {
+          const i = fresh.findIndex(w => w.topic === mine.topic);
+          if (i !== -1) fresh[i] = mergeWatermark(fresh[i]!, mine);
+        }
+        await save(fresh);
+      });
+    }
 
     const total_new = results.reduce((n, r) => n + r.new_papers.length, 0);
     let text = `# arXiv alerts\n\n${total_new} new paper(s) across ${results.length} watch(es).\n\n`;
@@ -297,7 +350,7 @@ export function handleArxivListWatches(_input: In<typeof arxivListWatchesSchema>
 }
 
 export function handleArxivUnwatchTopic(input: In<typeof arxivUnwatchTopicSchema>): Promise<ToolOut> {
-  return exclusive(async () => {
+  return exclusive(() => withFileLock(async () => {
     const { watches, warning } = await load();
     const rest = watches.filter(w => w.topic !== input.topic);
     if (rest.length === watches.length) {
@@ -308,7 +361,7 @@ export function handleArxivUnwatchTopic(input: In<typeof arxivUnwatchTopicSchema
       text: withWarning(`Removed watch \`${input.topic}\`.`, warning),
       structured: { topic: input.topic, removed: true, ...(warning ? { warning } : {}) },
     };
-  });
+  }));
 }
 
 // ── Registration ─────────────────────────────────────────────────────────────

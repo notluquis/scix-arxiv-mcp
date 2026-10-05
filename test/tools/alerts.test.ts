@@ -240,6 +240,86 @@ describe('persistence', () => {
   });
 });
 
+describe('cross-process writers on watches.json', () => {
+  const file = () => path.join(stateDir(), 'watches.json');
+  const readFile = () => JSON.parse(fs.readFileSync(file(), 'utf8')).watches as { topic: string; last_checked: string; seen_at_watermark: string[] }[];
+
+  it('a check does not drop a watch another process added, nor revive one it removed, while it fetched', async () => {
+    at('2026-10-04T12:00:00Z');
+    fakeArxiv([{ id: 'X1', published: '2026-10-04T12:10:00Z' }]);
+    await handleArxivWatchTopic({ topic: 'alpha' });
+    await handleArxivWatchTopic({ topic: 'gone' });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (u: string | URL) => {
+      // "session B", mid-fetch: adds a watch, removes another, straight on disk
+      const data = JSON.parse(fs.readFileSync(file(), 'utf8')) as { watches: Record<string, unknown>[] };
+      const base = data.watches[0]!;
+      data.watches = data.watches.filter(w => w['topic'] !== 'gone');
+      data.watches.push({ ...base, topic: 'added-by-B', seen_at_watermark: [] });
+      fs.writeFileSync(file(), JSON.stringify(data));
+      return inner(u);
+    }) as unknown as typeof fetch;
+    at('2026-10-04T13:00:00Z');
+    await handleArxivCheckAlerts({ topic: 'alpha' });
+    const ws = readFile();
+    expect(ws.map(w => w.topic).sort()).toEqual(['added-by-B', 'alpha']);
+    expect(ws.find(w => w.topic === 'alpha')!.last_checked).toBe('2026-10-04T12:10:00Z');
+  });
+
+  it('keeps the later watermark and unions seen ids at an equal one', async () => {
+    at('2026-10-04T12:00:00Z');
+    fakeArxiv([{ id: 'X1', published: '2026-10-04T12:10:00Z' }]);
+    await handleArxivWatchTopic({ topic: 'alpha' });
+    const inner = global.fetch;
+    global.fetch = vi.fn(async (u: string | URL) => {
+      const data = JSON.parse(fs.readFileSync(file(), 'utf8')) as { watches: Record<string, unknown>[] };
+      // "session B" reported another paper in the very same second
+      data.watches[0]!['last_checked'] = '2026-10-04T12:10:00Z';
+      data.watches[0]!['seen_at_watermark'] = ['OTHER'];
+      fs.writeFileSync(file(), JSON.stringify(data));
+      return inner(u);
+    }) as unknown as typeof fetch;
+    at('2026-10-04T13:00:00Z');
+    await handleArxivCheckAlerts({});
+    expect(readFile()[0]!.seen_at_watermark.sort()).toEqual(['OTHER', 'X1']);
+
+    // and a watermark already ahead on disk is not moved backwards
+    const data = JSON.parse(fs.readFileSync(file(), 'utf8')) as { watches: Record<string, unknown>[] };
+    data.watches[0]!['last_checked'] = '2026-10-04T12:30:00Z';
+    data.watches[0]!['seen_at_watermark'] = ['LATER'];
+    fs.writeFileSync(file(), JSON.stringify(data));
+    fakeArxiv([]);
+    const inner2 = global.fetch;
+    global.fetch = vi.fn(async (u: string | URL) => {
+      data.watches[0]!['last_checked'] = '2026-10-04T12:40:00Z';
+      data.watches[0]!['seen_at_watermark'] = ['LATEST'];
+      fs.writeFileSync(file(), JSON.stringify(data));
+      return inner2(u);
+    }) as unknown as typeof fetch;
+    await handleArxivCheckAlerts({});
+    expect(readFile()[0]!.last_checked).toBe('2026-10-04T12:40:00Z');
+  });
+
+  it('writers wait for a live lock, and take over a stale one', async () => {
+    fs.mkdirSync(stateDir(), { recursive: true });
+    const lock = `${file()}.lock`;
+    fs.writeFileSync(lock, '999999');
+    setTimeout(() => fs.rmSync(lock, { force: true }), 150);
+    const t0 = performance.now();
+    await handleArxivWatchTopic({ topic: 'waited' });
+    expect(performance.now() - t0).toBeGreaterThanOrEqual(100);
+    expect(readFile().map(w => w.topic)).toEqual(['waited']);
+    expect(fs.existsSync(lock)).toBe(false);
+
+    fs.writeFileSync(lock, '999999');
+    const old = new Date(Date.now() - 60_000); // Date is faked in this file; mtime must be relative to it
+    fs.utimesSync(lock, old, old);
+    await handleArxivWatchTopic({ topic: 'after-stale' });
+    expect(readFile().map(w => w.topic)).toContain('after-stale');
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+});
+
 describe('over the real protocol', () => {
   it('response_format json is honoured by all four tools and the structured results validate', async () => {
     const c = await connect();
