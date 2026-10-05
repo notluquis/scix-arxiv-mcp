@@ -332,11 +332,18 @@ function balancedEnd(text: string, open: number): number {
   return -1;
 }
 
+const FORMAT_CMD = /\\(?:textbf|textit|emph|texttt|textsc|textrm|mbox|uppercase)\{([^{}]*)\}/g;
+
 export function cleanLatexTitle(raw: string): string {
-  return raw
+  // Innermost first: `[^{}]*` cannot cross braces, so nested commands need one pass per level.
+  let s = raw;
+  for (let prev = ''; s !== prev; ) {
+    prev = s;
+    s = s.replace(FORMAT_CMD, '$1');
+  }
+  return s
     .replace(/\\label\{[^{}]*\}/g, '')
     .replace(/\\texorpdfstring\{[^{}]*\}\{([^{}]*)\}/g, '$1')
-    .replace(/\\(?:textbf|textit|emph|texttt|textsc|textrm|mbox|uppercase)\{([^{}]*)\}/g, '$1')
     .replace(/\\\\|\\newline/g, ' ')
     .replace(/~/g, ' ')
     .replace(/\s+/g, ' ')

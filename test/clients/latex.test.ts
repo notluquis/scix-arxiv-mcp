@@ -1,7 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
-  LATEX_LIMITS, chooseMain, extractTexFiles, flattenLatex, parseLatexSections, stripLatexCommands,
+  LATEX_LIMITS, chooseMain, cleanLatexTitle, extractTexFiles, flattenLatex, parseLatexSections, stripLatexCommands,
   type LatexLimits,
 } from '../../src/clients/latex.js';
 import {
@@ -157,6 +157,13 @@ describe('flattenLatex', () => {
       'd.tex': 'x'.repeat(1000),
     });
     expect(() => flattenLatex(files, limits({ maxFlatChars: 50_000 }))).toThrow('exceeds 50000 characters');
+  });
+});
+
+describe('cleanLatexTitle', () => {
+  it('unwraps nested formatting commands (review: one pass left \\textbf{Title})', () => {
+    expect(cleanLatexTitle('\\textbf{\\textit{Massive} binaries}')).toBe('Massive binaries');
+    expect(cleanLatexTitle('\\emph{\\textbf{\\texttt{x}}}')).toBe('x');
   });
 });
 

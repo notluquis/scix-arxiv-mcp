@@ -68,7 +68,9 @@ export class ScixClient {
     return res.json();
   }
 
-  async #request(url: string, init: RequestInit, idempotent = init.method === 'GET'): Promise<Response> {
+  // PUT is idempotent (an edit sets values). DELETE is not retried: biblib answers 410 to a repeated
+  // DELETE, so a retry after a 503 that committed would report a false failure.
+  async #request(url: string, init: RequestInit, idempotent = init.method === 'GET' || init.method === 'PUT'): Promise<Response> {
     const res = await fetchWithPolicy(url, {
       ...init,
       headers: {
