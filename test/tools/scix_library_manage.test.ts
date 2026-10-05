@@ -221,10 +221,16 @@ describe('permissions', () => {
 });
 
 describe('mutations are not retried blindly', () => {
-  it('a 503 on PUT is not retried; a 429 is', async () => {
+  it('a 503 on DELETE is not retried: biblib answers 410 to a repeated DELETE, so a retry after a 503 that committed would report a false failure', async () => {
+    const mock = mockFetch({ status: 503, text: 'unavailable' });
+    await expect(new ScixClient().delete('biblib/documents/abc123')).rejects.toThrow('503');
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a 503 on PUT is retried (PUT is idempotent: the edit sets values); a 429 too', async () => {
     const mock503 = mockFetch({ status: 503, text: 'unavailable' });
     await expect(handleScixLibraryEdit(new ScixClient(), { library_id: 'abc123', name: 'N' })).rejects.toThrow('503');
-    expect(mock503).toHaveBeenCalledTimes(1);
+    expect(mock503).toHaveBeenCalledTimes(4); // 1 + 3 retries
 
     let n = 0;
     const mock429 = vi.fn(async () => {
