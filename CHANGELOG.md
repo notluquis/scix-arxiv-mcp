@@ -20,6 +20,7 @@ Rewrite as a local stdio server for MCP protocol 2026-07-28 only. Requires Claud
 - Shared arXiv/Semantic Scholar rate limiting, `Retry-After`-aware retries and an XDG disk cache.
 - Identifier safety (library ids, bibcodes in URL paths, escaped Solr identifiers) and an untrusted-content banner on fetched paper text.
 - In-process 2026-07-28 test harness, an approval-gated contract snapshot (`test/contract.json`) and a stdio smoke test (`pnpm smoke`).
+- Claude Code plugin and marketplace (`.claude-plugin/`, token as sensitive `userConfig`), `scix-arxiv-mcp` bin, MIT `LICENSE` and `NOTICE` for upstream attributions.
 - CI: hardened tests on Node 24 and 26, zizmor, Dependabot, a daily SDK canary, and a release workflow that moves the `stable` tag.
 
 ### Changed

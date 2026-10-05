@@ -30,16 +30,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
-# Python (arxiv-mcp-server)
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-dist/
-.pytest_cache/
-.coverage
-htmlcov/
-
 # Misc
 *.tmp
 .cache/

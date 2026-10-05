@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import './stdout-guard.js';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { buildServer } from './server.js';

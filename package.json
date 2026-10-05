@@ -2,6 +2,22 @@
   "name": "scix-arxiv-mcp",
   "version": "2.0.0-dev",
   "description": "Local stdio MCP server for SciX (NASA ADS) and arXiv (MCP 2026-07-28)",
+  "license": "MIT",
+  "author": "Lucas Pulgar Escobar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/notluquis/scix-arxiv-mcp.git"
+  },
+  "bin": {
+    "scix-arxiv-mcp": "build/index.js"
+  },
+  "files": [
+    "build",
+    "data/scix",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
   "type": "module",
   "engines": {
     "node": ">=24"

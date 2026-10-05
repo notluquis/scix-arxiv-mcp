@@ -1,0 +1,12 @@
+{
+  "name": "scix-arxiv-mcp",
+  "description": "SciX/ADS + arXiv MCP server for Claude Code",
+  "owner": { "name": "notluquis" },
+  "plugins": [
+    {
+      "name": "scix-arxiv",
+      "source": "./",
+      "description": "SciX/ADS and arXiv literature tools: search, section-level paper reading, LaTeX source, citations, libraries, topic alerts."
+    }
+  ]
+}
