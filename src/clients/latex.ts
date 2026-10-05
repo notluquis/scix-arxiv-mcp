@@ -462,7 +462,10 @@ async function downloadAndFlatten(urlId: string, step: LatexStep): Promise<FlatL
   let archive: Buffer;
   try {
     const res = await fetchWithPolicy(`https://arxiv.org/e-print/${urlId}`, {}, { maxBytes: LATEX_LIMITS.downloadBytes });
-    if (!res.ok) throw new LatexSourceError(`No LaTeX source available for ${urlId} (HTTP ${res.status}).`);
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      throw new LatexSourceError(`No LaTeX source available for ${urlId} (HTTP ${res.status}).`);
+    }
     archive = Buffer.from(await res.arrayBuffer());
   } catch (e) {
     if (e instanceof LatexSourceError) throw e;

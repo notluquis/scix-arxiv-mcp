@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { arxivSearch, type ArxivPaper } from '../clients/arxiv.js';
+import { ARXIV_CATEGORY, arxivSearch, type ArxivPaper } from '../clients/arxiv.js';
 import { stateDir } from '../cache.js';
 import {
   addTool, CREATE_REMOTE, notFound, READ_LOCAL, responseFormat, type ToolOut,
@@ -174,6 +174,8 @@ export const arxivWatchTopicSchema = z.object({
 });
 
 export function handleArxivWatchTopic(input: In<typeof arxivWatchTopicSchema>): Promise<ToolOut> {
+  const badCat = input.categories?.find(c => !ARXIV_CATEGORY.test(c));
+  if (badCat !== undefined) return Promise.resolve(notFound(`Error: invalid arXiv category ${JSON.stringify(badCat)}; expected e.g. "cs.LG" or "astro-ph".`));
   return exclusive(() => withFileLock(async () => {
     const { watches, warning } = await load();
     const nowIso = new Date().toISOString();

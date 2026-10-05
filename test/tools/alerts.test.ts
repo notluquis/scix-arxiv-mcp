@@ -85,6 +85,12 @@ describe('arxiv_watch_topic', () => {
     expect(decodeURIComponent(urls.at(-1)!)).not.toContain('cat:');
   });
 
+  it('a category that would inject query syntax is rejected and nothing is saved', async () => {
+    const r = await handleArxivWatchTopic({ topic: 't', categories: ['cs.LG OR all:x'] });
+    expect(r.isError).toBe(true);
+    expect(fs.existsSync(path.join(stateDir(), 'watches.json'))).toBe(false);
+  });
+
   it('max_results: default 10, preserved on update, replaced when given, and sent to arXiv', async () => {
     at('2026-10-04T12:00:00Z');
     const urls = fakeArxiv([]);

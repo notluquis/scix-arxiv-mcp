@@ -69,6 +69,7 @@ claude mcp add -s user scix-arxiv -e SCIX_API_TOKEN=<your token> -- npx -y githu
 | Cache | `$XDG_CACHE_HOME/scix-arxiv-mcp` (default `~/.cache/scix-arxiv-mcp`). TTL: 30 days for versioned arXiv ids, 3 days for unversioned, 1 day for Semantic Scholar |
 | State | `$XDG_STATE_HOME/scix-arxiv-mcp/watches.json` (default `~/.local/state/scix-arxiv-mcp/`): topic watches |
 | Rate limits | Per process: arXiv 1 request per 3 s, Semantic Scholar 1 per 1 s, `Retry-After` honoured. N parallel Claude Code sessions run N servers, so N times the rate |
+| Limits | `arxiv_check_alerts` reports by `published` against a per-watch watermark: a paper announced late with `published` earlier than the watermark is not reported. Alerts are not a complete feed; use `arxiv_search` with a date range to audit |
 | Optional env | `SEMANTIC_SCHOLAR_API_KEY` (citation graph), `ARXIV_MAX_RESULTS` (default 10) |
 | Logging | Stdout carries the protocol; diagnostics go to stderr |
 

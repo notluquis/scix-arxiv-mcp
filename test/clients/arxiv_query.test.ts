@@ -37,4 +37,12 @@ describe('arXiv query construction', () => {
   it('encodes spaces as +', () => {
     expect(buildArxivUrl('ti:"a b"', {})).toContain('(ti%3A%22a+b%22)');
   });
+
+  it.each(['cs.LG', 'astro-ph.GA', 'astro-ph', 'hep-th', 'math.AG'])('accepts category %s', c => {
+    expect(q(buildArxivUrl('x', { categories: [c] }))).toContain(`cat:${c}`);
+  });
+
+  it.each(['cs.LG OR all:x', 'cs.LG)', '', 'cs.', 'a.b.c', 'cs.LG"'])('rejects category %j before building the query', c => {
+    expect(() => buildArxivUrl('x', { categories: ['cs.LG', c] })).toThrow(/Invalid arXiv category/);
+  });
 });

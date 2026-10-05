@@ -114,6 +114,9 @@ export function toArxivDate(date: string, edge: 'start' | 'end'): string {
   return `${ymd}${edge === 'start' ? '0000' : '2359'}`;
 }
 
+/** `cs.LG`, `astro-ph`, `math.AG`, `hep-th`: anything else would be spliced into the query as syntax. */
+export const ARXIV_CATEGORY = /^[a-z-]+(\.[A-Za-z-]+)?$/;
+
 const ARXIV_SYNTAX = /["()]|\b(?:AND|OR|ANDNOT)\b|\b(?:ti|au|abs|co|jr|cat|rn|id|all|submittedDate|lastUpdatedDate):/;
 
 /**
@@ -149,6 +152,8 @@ export function buildArxivUrl(
   }
 
   if (opts.categories?.length) {
+    const bad = opts.categories.find(c => !ARXIV_CATEGORY.test(c));
+    if (bad !== undefined) throw new Error(`Invalid arXiv category ${JSON.stringify(bad)}; expected e.g. "cs.LG" or "astro-ph".`);
     const catFilter = opts.categories.map(c => `cat:${c}`).join(' OR ');
     parts.push(`(${catFilter})`);
   }

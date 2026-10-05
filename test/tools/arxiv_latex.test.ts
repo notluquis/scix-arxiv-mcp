@@ -134,6 +134,22 @@ describe('LaTeX source tools through the protocol', () => {
     expect(textOf(r)).toContain('HTTP 404');
   });
 
+  it('a non-ok e-print response has its body cancelled, not left open', async () => {
+    let cancelled = false;
+    global.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes('/api/query')) return bytesResponse(Buffer.from(makeAtomFeed([PAPER_1])));
+      if (u.includes('/e-print/')) {
+        const body = new ReadableStream({ pull(ctrl) { ctrl.enqueue(new Uint8Array(8)); }, cancel() { cancelled = true; } });
+        return new Response(body, { status: 500 });
+      }
+      return bytesResponse(Buffer.alloc(0), 404);
+    }) as typeof fetch;
+    const r = await c.client.callTool({ name: 'arxiv_list_latex_sections', arguments: { paper_id: ID } });
+    expect(r.isError).toBe(true);
+    expect(cancelled).toBe(true);
+  });
+
   it('caches the flattened source: a second tool call does not download again', async () => {
     const calls = mockWeb(tgz(SOURCE));
     await c.client.callTool({ name: 'arxiv_list_latex_sections', arguments: { paper_id: ID } });
