@@ -284,8 +284,8 @@ async function confirmDestructive(
     return accepted?.confirm === true ? 'proceed' : 'cancelled';
   }
 
-  // The lookup only makes the question readable. If it fails (measured: 410 right after `union`
-  // created the library), still ask, naming the id, instead of failing the whole action.
+  // The lookup only makes the question readable. If it fails (e.g. a 410 or a network
+  // error), still ask, naming the id, instead of failing the whole action.
   let meta: Partial<LibraryMeta> = {};
   try {
     const data = await client.get(`biblib/libraries/${id}`) as { metadata?: Partial<LibraryMeta> } & Partial<LibraryMeta>;
@@ -494,17 +494,23 @@ export async function handleScixLibraryNote(
   client: ScixClient,
   input: In<typeof scixLibraryNoteSchema>
 ): Promise<ToolOut> {
-  const endpoint = `biblib/libraries/${libraryIdSegment(input.library_id)}/notes/${bibcodeSegment(input.bibcode)}`;
+  // biblib OpenAPI: /biblib/notes/{library_id}/{document_id}
+  const endpoint = `biblib/notes/${libraryIdSegment(input.library_id)}/${bibcodeSegment(input.bibcode)}`;
   const base = { library_id: input.library_id, bibcode: input.bibcode, action: input.action };
 
   if (input.action === 'get') {
-    const data = await client.get(endpoint) as {
-      content?: string;
-      date_created?: string;
-      date_last_modified?: string;
-    };
+    type Note = { content?: string; date_created?: string; date_last_modified?: string };
+    let data: Note & { note?: Note } = {};
+    try {
+      data = await client.get(endpoint) as typeof data;
+    } catch (e) {
+      // Measured live: a missing note is HTTP 400 "Note does not exist ...", not an empty 200.
+      if (!(e instanceof ScixApiError && e.status === 400 && /note does not exist/i.test(e.body))) throw e;
+    }
+    // biblib OpenAPI: the note comes nested as { document, note: { content, ... } }.
+    const note: Note = data.note ?? data;
 
-    if (!data.content) {
+    if (!note.content) {
       return {
         text: `No note found for \`${input.bibcode}\` in library \`${input.library_id}\`.`,
         structured: { ...base },
@@ -512,17 +518,23 @@ export async function handleScixLibraryNote(
     }
 
     let out = `# Note for \`${input.bibcode}\`\n\n`;
-    out += data.content + '\n\n';
-    if (data.date_last_modified) out += `*Last updated: ${data.date_last_modified.slice(0, 10)}*\n`;
+    out += note.content + '\n\n';
+    if (note.date_last_modified) out += `*Last updated: ${note.date_last_modified.slice(0, 10)}*\n`;
     return {
       text: out,
-      structured: { ...base, content: data.content, date_last_modified: data.date_last_modified },
+      structured: { ...base, content: note.content, date_last_modified: note.date_last_modified },
     };
   }
 
   if (input.action === 'set') {
     if (!input.content) return notFound('Error: content is required for action="set"');
-    await client.post(endpoint, { content: input.content });
+    try {
+      await client.post(endpoint, { content: input.content });
+    } catch (e) {
+      // Measured live: one note per paper, so a second POST is 409 "Note for this document already exists."
+      if (!(e instanceof ScixApiError && e.status === 409)) throw e;
+      await client.put(endpoint, { content: input.content });
+    }
     return {
       text: `Note saved for \`${input.bibcode}\` in library \`${input.library_id}\`.`,
       structured: { ...base },

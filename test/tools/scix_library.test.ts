@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ScixClient } from '../../src/clients/scix.js';
 import {
   handleScixLibraryList,
@@ -277,20 +277,37 @@ describe('handleScixLibraryNote', () => {
   afterEach(restoreFetch);
 
   it('get returns the note', async () => {
-    const mock = mockFetch({ body: { content: 'remember this', date_last_modified: '2024-06-15T00:00:00' } });
+    // Shape from the biblib OpenAPI (GET /biblib/notes/{library_id}/{document_id}): the note is nested.
+    const mock = mockFetch({ body: { document: '2019ApJ...882L..24A', note: { content: 'remember this', date_last_modified: '2024-06-15T00:00:00' } } });
 
     const result = await handleScixLibraryNote(new ScixClient(), {
       library_id: 'abc123', bibcode: '2019ApJ...882L..24A', action: 'get',
     });
 
-    expect(String(mock.mock.calls[0][0])).toContain('biblib/libraries/abc123/notes/2019ApJ...882L..24A');
+    expect(String(mock.mock.calls[0][0])).toContain('biblib/notes/abc123/2019ApJ...882L..24A');
     expect(result.text).toContain('remember this');
     expect(result.text).toContain('2024-06-15');
     expect(result.structured).toMatchObject({ action: 'get', content: 'remember this' });
   });
 
+  it('set on a paper that already has a note updates it with PUT (live: second POST is 409)', async () => {
+    const methods: string[] = [];
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      methods.push(init?.method ?? 'GET');
+      const conflict = init?.method === 'POST';
+      const body = conflict ? { error: 'Note for this document already exists.' } : { content: 'second' };
+      return { ok: !conflict, status: conflict ? 409 : 200, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body, text: async () => JSON.stringify(body) } as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await handleScixLibraryNote(new ScixClient(), { library_id: 'abc123', bibcode: 'B', action: 'set', content: 'second' });
+
+    expect(methods).toEqual(['POST', 'PUT']);
+    expect(result.isError).toBeUndefined();
+  });
+
   it('get reports a missing note without failing', async () => {
-    mockFetch({ body: {} });
+    // Measured live: a missing note is HTTP 400 with this body, not an empty 200.
+    mockFetch({ status: 400, body: { error: 'Note does not exist for specified document.See the API documentation: http://adsabs.github.io/help/api/' } });
 
     const result = await handleScixLibraryNote(new ScixClient(), { library_id: 'abc123', bibcode: 'B', action: 'get' });
 
@@ -330,6 +347,6 @@ describe('handleScixLibraryNote', () => {
     expect(mock).not.toHaveBeenCalled();
 
     await handleScixLibraryNote(client, { library_id: 'abc123', bibcode: '2020A&A...641A...6P', action: 'get' });
-    expect(String(mock.mock.calls[0][0])).toContain('/notes/2020A%26A...641A...6P');
+    expect(String(mock.mock.calls[0][0])).toContain('biblib/notes/abc123/2020A%26A...641A...6P');
   });
 });

@@ -212,7 +212,7 @@ describe('scix_library_operation empty confirmation (input_required)', () => {
 });
 
 describe('confirmation when the library lookup fails', () => {
-  // Measured live: a library just created by `union` answered 410 to the lookup, and the delete failed outright.
+  // A failing lookup (e.g. 410) must not abort the action; it only builds the question text.
   it('still asks (naming the id) and sends exactly one DELETE', async () => {
     const c = await connect({ elicitation: true });
     const asked: string[] = [];
