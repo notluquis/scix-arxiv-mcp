@@ -13,7 +13,7 @@ Local stdio MCP server that gives Claude Code 39 tools for NASA SciX / ADS and a
 
 ## Install
 
-Plugin marketplace (the token is entered as a sensitive `userConfig` value and kept in the OS credential store):
+Plugin marketplace. Two sensitive `userConfig` options, kept in the OS credential store: `scix_api_token` (needed by the `scix_*` tools) and `semantic_scholar_api_key` (optional; without it `arxiv_citation_graph` hits Semantic Scholar's 429 quickly). Set or change them with `/plugin configure scix-arxiv@scix-arxiv-mcp`; `health_check` reports whether each one is set:
 
 ```bash
 claude plugin marketplace add notluquis/scix-arxiv-mcp

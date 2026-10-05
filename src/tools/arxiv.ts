@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { arxivGetPaper, arxivReadPaper, arxivSearch } from '../clients/arxiv.js';
 import { cached, TTL_S2_MS } from '../cache.js';
+import { envSecret } from '../config.js';
 import { fetchWithPolicy } from '../http.js';
 import {
   formatArxivList, formatArxivPaper, formatArxivReadPaper,
@@ -296,7 +297,7 @@ export async function handleArxivCitationGraph(
   let paper: SemanticScholarPaper;
   try {
     paper = await cached('s2', paperId, TTL_S2_MS, async () => {
-      const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim();
+      const apiKey = envSecret('SEMANTIC_SCHOLAR_API_KEY');
       const res = await fetchWithPolicy(url, apiKey ? { headers: { 'x-api-key': apiKey } } : {});
       if (!res.ok) {
         const text = await res.text().catch(() => '');

@@ -6,7 +6,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ScixApiError, getScixClient } from '../clients/scix.js';
-import { getScixApiKey } from '../config.js';
+import { envSecret, getScixApiKey } from '../config.js';
 import { cacheDir, stateDir } from '../cache.js';
 import { READ_EXTERNAL, addTool, registeredToolCount, responseFormat, type ToolOut } from '../content.js';
 import { SCIX_ICONS } from '../icons.js';
@@ -97,6 +97,7 @@ export const healthOutput = z.object({
   server: z.object({ name: z.string(), version: z.string(), sdk_version: z.string() }),
   protocol: z.string(),
   scix_token_configured: z.boolean(),
+  semantic_scholar_key_configured: z.boolean(),
   ads_probe: z.object({
     state: z.enum(['ok', 'unauthorized', 'rate_limited', 'unreachable', 'skipped']),
     message: z.string().optional(),
@@ -116,6 +117,7 @@ export async function handleHealthCheck(ctx: ServerContext | undefined, toolCoun
     server: { name: pkg.name, version: pkg.version, sdk_version: await sdkVersion() },
     protocol: typeof protocol === 'string' ? protocol : 'unknown',
     scix_token_configured: tokenConfigured(),
+    semantic_scholar_key_configured: envSecret('SEMANTIC_SCHOLAR_API_KEY') !== undefined,
     ads_probe: await probeAds(),
     cache_dir: await dirStatus(cacheDir()),
     state_dir: await dirStatus(stateDir()),
@@ -128,6 +130,7 @@ export async function handleHealthCheck(ctx: ServerContext | undefined, toolCoun
   text += `- **Server:** ${report.server.name} ${report.server.version} (MCP SDK ${report.server.sdk_version})\n`;
   text += `- **Protocol:** ${report.protocol}\n`;
   text += `- **SciX token configured:** ${yn(report.scix_token_configured)}\n`;
+  text += `- **Semantic Scholar key configured:** ${yn(report.semantic_scholar_key_configured)} (optional)\n`;
   text += `- **ADS probe:** ${probe.state}${probe.message ? ` (${probe.message})` : ''}${probe.reset_at ? `, resets ${probe.reset_at}` : ''}\n`;
   for (const [label, d] of [['Cache', report.cache_dir], ['State', report.state_dir]] as const) {
     text += `- **${label} dir:** ${d.path} (exists: ${yn(d.exists)}, writable: ${yn(d.writable)})\n`;

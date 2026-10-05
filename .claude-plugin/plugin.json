@@ -1,26 +1,47 @@
 {
   "name": "scix-arxiv",
   "displayName": "SciX + arXiv",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Local MCP server for NASA SciX/ADS and arXiv: search, read papers by section, LaTeX source, citations, libraries and topic alerts.",
-  "author": { "name": "Lucas Pulgar Escobar" },
+  "author": {
+    "name": "Lucas Pulgar Escobar"
+  },
   "homepage": "https://github.com/notluquis/scix-arxiv-mcp",
   "repository": "https://github.com/notluquis/scix-arxiv-mcp",
   "license": "MIT",
-  "keywords": ["mcp", "arxiv", "scix", "ads", "astronomy", "papers"],
+  "keywords": [
+    "mcp",
+    "arxiv",
+    "scix",
+    "ads",
+    "astronomy",
+    "papers"
+  ],
   "userConfig": {
     "scix_api_token": {
       "type": "string",
       "title": "SciX API token",
       "description": "Needed for the scix_* tools (arXiv tools work without it). Create one at https://scixplorer.org/user/settings/token",
       "sensitive": true
+    },
+    "semantic_scholar_api_key": {
+      "type": "string",
+      "title": "Semantic Scholar API key (optional)",
+      "description": "Raises the rate limit of arxiv_citation_graph; without it Semantic Scholar answers 429 quickly. Request one at https://www.semanticscholar.org/product/api#api-key-form",
+      "sensitive": true
     }
   },
   "mcpServers": {
     "scix-arxiv": {
       "command": "npx",
-      "args": ["-y", "github:notluquis/scix-arxiv-mcp#stable"],
-      "env": { "SCIX_API_TOKEN": "${user_config.scix_api_token}" }
+      "args": [
+        "-y",
+        "github:notluquis/scix-arxiv-mcp#stable"
+      ],
+      "env": {
+        "SCIX_API_TOKEN": "${user_config.scix_api_token}",
+        "SEMANTIC_SCHOLAR_API_KEY": "${user_config.semantic_scholar_api_key}"
+      }
     }
   }
 }

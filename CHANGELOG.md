@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.2] - 2026-10-05
+
+### Added
+
+- Plugin option `semantic_scholar_api_key` (sensitive, optional) passed as `SEMANTIC_SCHOLAR_API_KEY`; `health_check` reports whether it is set.
+
+### Fixed
+
+- An unset plugin option that reaches the server as a literal `${user_config.*}` placeholder is treated as unset, so it is never sent to an API as a key.
+
 ## [2.0.1] - 2026-10-05
 
 ### Fixed

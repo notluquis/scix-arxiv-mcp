@@ -7,14 +7,24 @@ export const DEFAULT_FIELDS = [
   'doi', 'arxiv_id', 'pub', 'volume', 'page', 'keyword', 'identifier'
 ].join(',');
 
+/**
+ * A secret from the environment, or undefined. Empty values and an unsubstituted
+ * `${user_config.*}` placeholder (a plugin option the user never set) both count as unset,
+ * so the placeholder is never sent to an API as a key.
+ */
+export function envSecret(name: string): string | undefined {
+  const v = process.env[name]?.trim();
+  return v && !/^\$\{[^}]*\}$/.test(v) ? v : undefined;
+}
+
 export function getScixApiKey(): string {
-  const key = process.env.SCIX_API_TOKEN;
-  if (!key?.trim()) {
+  const key = envSecret('SCIX_API_TOKEN');
+  if (!key) {
     throw new Error(
       'SCIX_API_TOKEN is not set. In Claude Code run /plugin → scix-arxiv → configure, or get a token at https://scixplorer.org/user/settings/token'
     );
   }
-  return key.trim();
+  return key;
 }
 
 export const ARXIV_API_URL = 'https://export.arxiv.org/api/query';

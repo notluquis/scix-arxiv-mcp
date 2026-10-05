@@ -4049,6 +4049,9 @@
           "scix_token_configured": {
             "type": "boolean"
           },
+          "semantic_scholar_key_configured": {
+            "type": "boolean"
+          },
           "server": {
             "additionalProperties": false,
             "properties": {
@@ -4097,6 +4100,7 @@
           "server",
           "protocol",
           "scix_token_configured",
+          "semantic_scholar_key_configured",
           "ads_probe",
           "cache_dir",
           "state_dir",
