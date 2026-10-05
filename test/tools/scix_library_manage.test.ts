@@ -138,35 +138,50 @@ describe('handleScixLibraryAddByQuery', () => {
 });
 
 describe('handleScixLibraryOperation', () => {
-  it('union sends action and the validated source libraries', async () => {
-    const mock = mockFetch({ body: { library_id: 'abc123', number_added: 4 } });
-    const result = await handleScixLibraryOperation(new ScixClient(), {
-      library_id: 'abc123', operation: 'union', source_library_ids: ['s1', 's2'],
+  // Shapes from adsabs-dev-api openapi/services/biblib.yaml (biblib-libraries-operations).
+  it.each(['union', 'intersection', 'difference'] as const)(
+    '%s creates a NEW library: name, description and public go in the body; the response id is reported', async operation => {
+      const mock = mockFetch({ body: { id: 'BeUbSWXtTPCaRhRV3nec_w', bibcode: ['2009A&A...502..515G', '2011ApJ...734...87R'], name: 'N', description: 'D' } });
+      const result = await handleScixLibraryOperation(new ScixClient(), {
+        library_id: 'abc123', operation, source_library_ids: ['s1', 's2'], name: 'N', description: 'D', public: true,
+      });
+      expect(sent(mock, 0).url).toContain('biblib/libraries/operations/abc123');
+      expect(sent(mock, 0).body).toEqual({ action: operation, libraries: ['s1', 's2'], name: 'N', description: 'D', public: true });
+      expect(result.structured).toMatchObject({ new_library_id: 'BeUbSWXtTPCaRhRV3nec_w', documents_affected: 2 });
     });
-    expect(sent(mock, 0).url).toContain('biblib/libraries/operations/abc123');
-    expect(sent(mock, 0).body).toEqual({ action: 'union', libraries: ['s1', 's2'] });
-    expect(result.structured).toMatchObject({ documents_affected: 4 });
-  });
 
-  it.each(['intersection', 'difference'] as const)('%s without sources is an error and sends nothing', async operation => {
+  it.each(['union', 'intersection', 'difference'] as const)('%s without sources is an error and sends nothing', async operation => {
     const mock = mockFetch();
     const result = await handleScixLibraryOperation(new ScixClient(), { library_id: 'abc123', operation });
     expect(result.isError).toBe(true);
     expect(mock).not.toHaveBeenCalled();
   });
 
-  it('copy sends name and description; other operations do not', async () => {
-    const mock = mockFetch({ body: { library_id: 'new1' } });
-    const client = new ScixClient();
-    const copy = await handleScixLibraryOperation(client, {
-      library_id: 'abc123', operation: 'copy', name: 'Copy of it', description: 'a copy',
+  it('copy writes into ONE existing target library: no name/description, no new library', async () => {
+    const mock = mockFetch({ body: { public: true, bibcode: ['2010ApJ...721L..48K'], name: 'Target', description: 'T' } });
+    const result = await handleScixLibraryOperation(new ScixClient(), {
+      library_id: 'abc123', operation: 'copy', source_library_ids: ['target1'], name: 'ignored', description: 'ignored', public: true,
     });
-    await handleScixLibraryOperation(client, {
-      library_id: 'abc123', operation: 'empty', name: 'ignored', description: 'ignored',
+    expect(sent(mock, 0).body).toEqual({ action: 'copy', libraries: ['target1'] });
+    expect((result.structured as Record<string, unknown>)['new_library_id']).toBeUndefined();
+    expect(result.text).toContain('target1');
+  });
+
+  it.each([[undefined], [[]], [['a', 'b']]])('copy needs exactly one target library (%j) and sends nothing otherwise', async ids => {
+    const mock = mockFetch();
+    const result = await handleScixLibraryOperation(new ScixClient(), {
+      library_id: 'abc123', operation: 'copy', ...(ids ? { source_library_ids: ids } : {}),
     });
-    expect(sent(mock, 0).body).toEqual({ action: 'copy', name: 'Copy of it', description: 'a copy' });
-    expect(sent(mock, 1).body).toEqual({ action: 'empty' });
-    expect(copy.structured).toMatchObject({ new_library_id: 'new1' });
+    expect(result.isError).toBe(true);
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('empty sends only the action', async () => {
+    const mock = mockFetch({ body: { public: true, bibcode: [], name: 'n', description: 'd' } });
+    await handleScixLibraryOperation(new ScixClient(), {
+      library_id: 'abc123', operation: 'empty', name: 'ignored', description: 'ignored', source_library_ids: ['x'],
+    });
+    expect(sent(mock, 0).body).toEqual({ action: 'empty' });
   });
 
   it('rejects a path-breaking source library id before sending', async () => {

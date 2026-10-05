@@ -2038,7 +2038,7 @@
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Combine libraries (union, intersection, difference), copy a library, or empty it. \"empty\" removes every paper from the target library; clients that support elicitation are asked to confirm first.",
+      "description": "Combine libraries into a NEW library (union, intersection, difference; optional name/description/public), copy the papers of one library into an EXISTING one (copy), or empty a library. \"empty\" removes every paper from the target library; clients that support elicitation are asked to confirm first.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -2052,7 +2052,7 @@
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "description": {
-            "description": "Description of the new library (copy only)",
+            "description": "Description of the new library (union/intersection/difference only)",
             "maxLength": 1000,
             "type": "string"
           },
@@ -2062,13 +2062,13 @@
             "type": "string"
           },
           "name": {
-            "description": "Name of the new library (copy only)",
+            "description": "Name of the new library (union/intersection/difference only; must be unique for the user)",
             "maxLength": 255,
             "minLength": 1,
             "type": "string"
           },
           "operation": {
-            "description": "union/intersection/difference combine the target with source_library_ids; copy duplicates the target into a new library; empty removes every paper from the target",
+            "description": "union/intersection/difference combine the target with source_library_ids and save the result to a NEW library; copy writes the target library's papers into ONE existing library given in source_library_ids (that library is not emptied first, no new library is created); empty removes every paper from the target",
             "enum": [
               "union",
               "intersection",
@@ -2077,6 +2077,10 @@
               "empty"
             ],
             "type": "string"
+          },
+          "public": {
+            "description": "Whether the new library is publicly viewable (union/intersection/difference only; default private)",
+            "type": "boolean"
           },
           "response_format": {
             "default": "markdown",
@@ -2088,7 +2092,7 @@
             "type": "string"
           },
           "source_library_ids": {
-            "description": "Other libraries to combine with the target (required for union, intersection, difference)",
+            "description": "Secondary libraries: one or more for union/intersection/difference; exactly one for copy (the existing library that receives the papers); none for empty",
             "items": {
               "minLength": 1,
               "type": "string"

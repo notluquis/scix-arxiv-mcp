@@ -58,14 +58,17 @@ export const scixLibraryAddByQuerySchema = z.object({
 export const scixLibraryOperationSchema = z.object({
   library_id: z.string().min(1).describe('Target library identifier'),
   operation: z.enum(['union', 'intersection', 'difference', 'copy', 'empty']).describe(
-    'union/intersection/difference combine the target with source_library_ids; copy duplicates the target ' +
-    'into a new library; empty removes every paper from the target'
+    'union/intersection/difference combine the target with source_library_ids and save the result to a NEW library; ' +
+    'copy writes the target library\'s papers into ONE existing library given in source_library_ids (that library is ' +
+    'not emptied first, no new library is created); empty removes every paper from the target'
   ),
   source_library_ids: z.array(z.string().min(1)).max(50).optional().describe(
-    'Other libraries to combine with the target (required for union, intersection, difference)'
+    'Secondary libraries: one or more for union/intersection/difference; exactly one for copy (the existing library that ' +
+    'receives the papers); none for empty'
   ),
-  name: z.string().min(1).max(255).optional().describe('Name of the new library (copy only)'),
-  description: z.string().max(1000).optional().describe('Description of the new library (copy only)'),
+  name: z.string().min(1).max(255).optional().describe('Name of the new library (union/intersection/difference only; must be unique for the user)'),
+  description: z.string().max(1000).optional().describe('Description of the new library (union/intersection/difference only)'),
+  public: z.boolean().optional().describe('Whether the new library is publicly viewable (union/intersection/difference only; default private)'),
   response_format: responseFormat,
 });
 
@@ -390,9 +393,13 @@ export async function handleScixLibraryOperation(
   ctx?: ServerContext
 ): Promise<ToolOut | InputRequiredResult> {
   const id = libraryIdSegment(input.library_id);
-  const needsSources = input.operation === 'union' || input.operation === 'intersection' || input.operation === 'difference';
-  if (needsSources && !input.source_library_ids?.length) {
+  const makesNewLibrary = input.operation === 'union' || input.operation === 'intersection' || input.operation === 'difference';
+  const sources = input.source_library_ids ?? [];
+  if (makesNewLibrary && !sources.length) {
     return notFound(`Error: source_library_ids is required for operation="${input.operation}".`);
+  }
+  if (input.operation === 'copy' && sources.length !== 1) {
+    return notFound('Error: operation="copy" needs exactly one library in source_library_ids: the existing library that receives the papers.');
   }
 
   if (input.operation === 'empty') {
@@ -402,22 +409,28 @@ export async function handleScixLibraryOperation(
     if (gate !== 'proceed') return gate;
   }
 
+  // Request shape per adsabs-dev-api openapi/services/biblib.yaml: name/description/public create the NEW library of
+  // union/intersection/difference; copy and empty take no metadata; empty takes no libraries.
   const body: Record<string, unknown> = { action: input.operation };
-  if (input.source_library_ids?.length) body['libraries'] = input.source_library_ids.map(libraryIdSegment);
-  if (input.operation === 'copy') {
+  if (input.operation !== 'empty' && sources.length) body['libraries'] = sources.map(libraryIdSegment);
+  if (makesNewLibrary) {
     if (input.name) body['name'] = input.name;
     if (input.description) body['description'] = input.description;
+    if (input.public !== undefined) body['public'] = input.public;
   }
 
-  const data = await client.post(`biblib/libraries/operations/${id}`, body) as { library_id?: string; number_added?: number };
+  const data = await client.post(`biblib/libraries/operations/${id}`, body) as { id?: string; library_id?: string; bibcode?: string[]; number_added?: number };
+  const newId = data.id ?? data.library_id;
+  const affected = data.bibcode?.length ?? data.number_added;
   let out = `Library operation \`${input.operation}\` on \`${input.library_id}\` completed.\n`;
-  if (data.library_id) out += `- **New library ID:** \`${data.library_id}\`\n`;
-  if (data.number_added !== undefined) out += `- **Documents affected:** ${data.number_added}\n`;
+  if (input.operation === 'copy') out += `- **Papers written into existing library:** \`${sources[0]}\` (not emptied first)\n`;
+  if (newId) out += `- **New library ID:** \`${newId}\`\n`;
+  if (affected !== undefined) out += `- **Documents in the resulting library:** ${affected}\n`;
   return {
     text: out,
     structured: {
       library_id: input.library_id, operation: input.operation,
-      new_library_id: data.library_id, documents_affected: data.number_added,
+      new_library_id: newId, documents_affected: affected,
     },
   };
 }
@@ -594,7 +607,7 @@ export function registerScixLibraryTools(server: McpServer): void {
 
   addTool(server, 'scix_library_operation', {
     title: 'Library set operation',
-    description: 'Combine libraries (union, intersection, difference), copy a library, or empty it. ' +
+    description: 'Combine libraries into a NEW library (union, intersection, difference; optional name/description/public), copy the papers of one library into an EXISTING one (copy), or empty a library. ' +
       '"empty" removes every paper from the target library; clients that support elicitation are asked to confirm first.',
     inputSchema: scixLibraryOperationSchema,
     outputSchema: z.object({

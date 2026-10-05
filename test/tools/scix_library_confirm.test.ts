@@ -201,7 +201,7 @@ describe('scix_library_operation empty confirmation (input_required)', () => {
     c.client.setRequestHandler(ELICIT, async () => { asked++; return { action: 'accept', content: { confirm: true } }; });
     try {
       const calls = mockAds();
-      const result = await c.client.callTool({ name: 'scix_library_operation', arguments: { library_id: 'abc123', operation: 'copy', name: 'x' } });
+      const result = await c.client.callTool({ name: 'scix_library_operation', arguments: { library_id: 'abc123', operation: 'copy', source_library_ids: ['target1'] } });
       expect(result.isError).toBeFalsy();
       expect(asked).toBe(0);
       expect(calls).toEqual([{ method: 'POST', path: OP }]);
