@@ -1,0 +1,546 @@
+import { CLIENT_CAPABILITIES_META_KEY, acceptedContent, inputRequired, inputResponse, } from '@modelcontextprotocol/server';
+import { z } from 'zod';
+import { ScixApiError, getScixClient } from '../clients/scix.js';
+import { SCIX_ICONS } from '../icons.js';
+import { bibcodeSegment, libraryIdSegment } from '../ids.js';
+import { CREATE_REMOTE, DESTRUCTIVE_REMOTE, MUTATE_REMOTE_IDEMPOTENT, READ_EXTERNAL, addTool, listOutput, notFound, responseFormat, } from '../content.js';
+// ── Schemas ───────────────────────────────────────────────────────────────────
+export const scixLibraryListSchema = z.object({
+    filter: z.enum(['all', 'owner', 'collaborator']).default('all').describe('Filter libraries by access type'),
+    response_format: responseFormat,
+});
+export const scixLibraryGetSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier (from scix_library_list)'),
+    response_format: responseFormat,
+});
+export const scixLibraryCreateSchema = z.object({
+    name: z.string().min(1).max(255).describe('Library name'),
+    description: z.string().max(1000).optional().describe('Library description'),
+    public: z.boolean().default(false).describe('Whether the library is publicly visible'),
+    bibcodes: z.array(z.string()).optional().describe('Initial papers to add (bibcodes)'),
+    response_format: responseFormat,
+});
+export const scixLibraryEditSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    name: z.string().min(1).max(255).optional().describe('New library name'),
+    description: z.string().max(1000).optional().describe('New library description'),
+    public: z.boolean().optional().describe('Whether the library is publicly visible'),
+    response_format: responseFormat,
+});
+export const scixLibraryDeleteSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    response_format: responseFormat,
+});
+export const scixLibraryAddByQuerySchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    query: z.string().min(1).describe('SciX search query; its top results are added to the library'),
+    rows: z.number().int().min(1).max(2000).default(25).describe('How many results to add (default 25)'),
+    response_format: responseFormat,
+});
+export const scixLibraryOperationSchema = z.object({
+    library_id: z.string().min(1).describe('Target library identifier'),
+    operation: z.enum(['union', 'intersection', 'difference', 'copy', 'empty']).describe('union/intersection/difference combine the target with source_library_ids and save the result to a NEW library; ' +
+        'copy writes the target library\'s papers into ONE existing library given in source_library_ids (that library is ' +
+        'not emptied first, no new library is created); empty removes every paper from the target'),
+    source_library_ids: z.array(z.string().min(1)).max(50).optional().describe('Secondary libraries: one or more for union/intersection/difference; exactly one for copy (the existing library that ' +
+        'receives the papers); none for empty'),
+    name: z.string().min(1).max(255).optional().describe('Name of the new library (union/intersection/difference only; must be unique for the user)'),
+    description: z.string().max(1000).optional().describe('Description of the new library (union/intersection/difference only)'),
+    public: z.boolean().optional().describe('Whether the new library is publicly viewable (union/intersection/difference only; default private)'),
+    response_format: responseFormat,
+});
+export const scixLibraryGetPermissionsSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    response_format: responseFormat,
+});
+export const scixLibraryUpdatePermissionsSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    email: z.email().describe('Email of the user whose access changes'),
+    permission: z.enum(['owner', 'admin', 'write', 'read']).describe('Permission level to grant'),
+    response_format: responseFormat,
+});
+export const scixLibraryTransferSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    email: z.email().describe('Email of the new owner'),
+    response_format: responseFormat,
+});
+export const scixLibraryDocumentsSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    bibcodes: z.array(z.string().min(1)).min(1).max(2000).describe('Bibcodes to add or remove'),
+    action: z.enum(['add', 'remove']).describe('Whether to add or remove the papers'),
+    response_format: responseFormat,
+});
+export const scixLibraryNoteSchema = z.object({
+    library_id: z.string().min(1).describe('Library identifier'),
+    bibcode: z.string().min(1).max(200).describe('Bibcode of the paper to annotate'),
+    action: z.enum(['get', 'set', 'delete']).describe('"get" retrieves the note, "set" creates or updates it, "delete" removes it'),
+    content: z.string().min(1).max(10000).optional().describe('Note content (required for action="set")'),
+    response_format: responseFormat,
+});
+const libraryOut = z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    description: z.string().optional(),
+    num_documents: z.number().optional(),
+    permission: z.string().optional(),
+    owner: z.string().optional(),
+    public: z.boolean().optional(),
+    date_last_modified: z.string().optional(),
+});
+function libraryRecord(m) {
+    return {
+        id: m.id,
+        name: m.name ?? '',
+        description: m.description,
+        num_documents: m.num_documents,
+        permission: m.permission,
+        owner: m.owner,
+        public: m.public,
+        date_last_modified: m.date_last_modified,
+    };
+}
+export async function handleScixLibraryList(client, input) {
+    const params = input.filter !== 'all' ? { access_type: input.filter } : undefined;
+    const data = await client.get('biblib/libraries', params);
+    const libs = data.libraries ?? [];
+    if (libs.length === 0) {
+        return { text: 'No libraries found.', structured: { total: 0, start: 0, items: [] } };
+    }
+    let out = `# Libraries (${libs.length})\n\n`;
+    for (const lib of libs) {
+        out += `## ${lib.name}\n`;
+        out += `- **ID:** \`${lib.id}\`\n`;
+        if (lib.description)
+            out += `- **Description:** ${lib.description}\n`;
+        out += `- **Papers:** ${lib.num_documents}  |  **Permission:** ${lib.permission}  |  **Public:** ${lib.public ? 'Yes' : 'No'}\n`;
+        out += `- **Owner:** ${lib.owner}  |  **Modified:** ${lib.date_last_modified.slice(0, 10)}\n\n`;
+    }
+    return { text: out, structured: { total: libs.length, start: 0, items: libs.map(libraryRecord) } };
+}
+export async function handleScixLibraryGet(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    const data = await client.get(`biblib/libraries/${id}`);
+    const meta = data.metadata ?? data;
+    const docs = data.documents ?? [];
+    if (!meta?.name)
+        return notFound(`Library ${input.library_id} not found or empty response.`);
+    let out = `# ${meta.name}\n\n`;
+    out += `- **ID:** \`${meta.id}\`\n`;
+    if (meta.description)
+        out += `- **Description:** ${meta.description}\n`;
+    out += `- **Papers:** ${meta.num_documents}  |  **Permission:** ${meta.permission}  |  **Public:** ${meta.public ? 'Yes' : 'No'}\n`;
+    out += `- **Owner:** ${meta.owner}\n\n`;
+    if (docs.length > 0) {
+        out += `## Papers (${docs.length})\n\n`;
+        docs.forEach((bib, i) => { out += `${i + 1}. \`${bib}\`\n`; });
+    }
+    return { text: out, structured: { library: libraryRecord(meta), documents: docs } };
+}
+export async function handleScixLibraryCreate(client, input) {
+    const body = {
+        name: input.name,
+        public: input.public,
+    };
+    if (input.description)
+        body['description'] = input.description;
+    if (input.bibcodes?.length)
+        body['bibcode'] = input.bibcodes; // biblib field is singular
+    const data = await client.post('biblib/libraries', body);
+    const library = data.metadata ?? data;
+    const id = library.id ?? '(unknown)';
+    const name = library.name ?? input.name;
+    const added = Array.isArray(library.bibcode) ? library.bibcode.length : library.num_documents ?? 0;
+    let out = `# Library Created: ${name}\n\n`;
+    out += `- **ID:** \`${id}\`\n`;
+    if (added > 0)
+        out += `- **Papers added:** ${added}\n`;
+    return { text: out, structured: { id, name, papers_added: added } };
+}
+export async function handleScixLibraryDocuments(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    const data = await client.post(`biblib/documents/${id}`, {
+        bibcode: input.bibcodes,
+        action: input.action,
+    });
+    const changed = data.number_added ?? data.number_removed ?? input.bibcodes.length;
+    const verb = input.action === 'add' ? 'Added' : 'Removed';
+    return {
+        text: `${verb} ${changed} paper(s) ${input.action === 'add' ? 'to' : 'from'} library \`${input.library_id}\`.`,
+        structured: { library_id: input.library_id, action: input.action, changed },
+    };
+}
+// ── Confirmation (input_required) ────────────────────────────────────────────
+const confirmSchema = z.object({ confirm: z.boolean() });
+/** True when the client declared the elicitation capability on this request (2026 envelope, keyed by meta-key). */
+function clientCanElicit(ctx) {
+    const envelope = ctx?.mcpReq.envelope;
+    const caps = envelope?.[CLIENT_CAPABILITIES_META_KEY];
+    return caps?.elicitation !== undefined && caps.elicitation !== null;
+}
+/**
+ * Asks the user to confirm an irreversible action. Returns 'proceed' (confirmed, or the client
+ * cannot be asked: Claude Code's permission prompt for non-read-only tools is then the gate),
+ * 'cancelled' (declined, cancelled or confirm=false), or the `input_required` result to send back.
+ * Only the library lookup runs on the first round; the retry carries the answer.
+ */
+async function confirmDestructive(client, ctx, id, describe) {
+    if (!ctx || !clientCanElicit(ctx))
+        return 'proceed';
+    const answer = inputResponse(ctx.mcpReq.inputResponses, 'confirm');
+    if (answer.kind === 'elicit') {
+        const accepted = acceptedContent(ctx.mcpReq.inputResponses, 'confirm', confirmSchema);
+        return accepted?.confirm === true ? 'proceed' : 'cancelled';
+    }
+    // The lookup only makes the question readable. If it fails (e.g. a 410 or a network
+    // error), still ask, naming the id, instead of failing the whole action.
+    let meta = {};
+    try {
+        const data = await client.get(`biblib/libraries/${id}`);
+        meta = data.metadata ?? data;
+    }
+    catch {
+        // fall through with the id
+    }
+    return inputRequired({
+        inputRequests: {
+            confirm: inputRequired.elicit({
+                message: describe(meta.name ?? id, meta.num_documents),
+                requestedSchema: confirmSchema,
+            }),
+        },
+    });
+}
+const CANCELLED = { text: 'Cancelled by user', structured: {}, isError: true };
+const papersOf = (n) => (n === undefined ? '' : ` (${n} papers)`);
+export async function handleScixLibraryEdit(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    const body = {};
+    if (input.name !== undefined)
+        body['name'] = input.name;
+    if (input.description !== undefined)
+        body['description'] = input.description;
+    if (input.public !== undefined)
+        body['public'] = input.public;
+    if (Object.keys(body).length === 0) {
+        return notFound('Error: provide at least one of name, description or public to update.');
+    }
+    // ADS keeps library metadata updates on the documents endpoint.
+    const data = await client.put(`biblib/documents/${id}`, body);
+    const meta = data.metadata ?? data;
+    const record = { ...libraryRecord(meta), id: meta.id ?? input.library_id, ...body };
+    let out = `# Library updated: ${record.name || input.library_id}\n\n`;
+    out += `- **ID:** \`${record.id}\`\n`;
+    for (const key of ['name', 'description', 'public']) {
+        if (body[key] !== undefined)
+            out += `- **${key}:** ${String(body[key])}\n`;
+    }
+    return { text: out, structured: { library: record, updated: Object.keys(body) } };
+}
+export async function handleScixLibraryDelete(client, input, ctx) {
+    const id = libraryIdSegment(input.library_id);
+    const gate = await confirmDestructive(client, ctx, id, (name, n) => `Delete library ${name}${papersOf(n)}? This cannot be undone.`);
+    if (gate === 'cancelled')
+        return CANCELLED;
+    if (gate !== 'proceed')
+        return gate;
+    // SciX deletes a library through the documents endpoint.
+    await client.delete(`biblib/documents/${id}`);
+    return {
+        text: `Library \`${input.library_id}\` deleted.`,
+        structured: { library_id: input.library_id, deleted: true },
+    };
+}
+export async function handleScixLibraryAddByQuery(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    const base = { library_id: input.library_id, query: input.query, requested: input.rows };
+    try {
+        const data = await client.post(`biblib/documents/${id}/query`, { query: input.query, rows: input.rows });
+        const added = data.number_added ?? 0;
+        return {
+            text: `Added ${added} paper(s) from query \`${input.query}\` to library \`${input.library_id}\`.`,
+            structured: { ...base, found: added, added, via: 'query_endpoint' },
+        };
+    }
+    catch (e) {
+        // A 404 means the endpoint did nothing (not deployed for this library): safe to fall back.
+        if (!(e instanceof ScixApiError && e.status === 404))
+            throw e;
+    }
+    const found = await client.get('search/query', { q: input.query, rows: input.rows, fl: 'bibcode', start: 0 });
+    const bibcodes = (found.response?.docs ?? [])
+        .map(d => d.bibcode)
+        .filter((b) => typeof b === 'string' && b.length > 0);
+    if (bibcodes.length === 0) {
+        return {
+            text: `No documents found for query \`${input.query}\`; nothing added.`,
+            structured: { ...base, found: 0, added: 0, via: 'search_fallback' },
+        };
+    }
+    const data = await client.post(`biblib/documents/${id}`, { bibcode: bibcodes, action: 'add' });
+    const added = data.number_added ?? bibcodes.length;
+    return {
+        text: `Added ${added} paper(s) from query \`${input.query}\` to library \`${input.library_id}\` (search fallback).`,
+        structured: { ...base, found: bibcodes.length, added, via: 'search_fallback' },
+    };
+}
+export async function handleScixLibraryOperation(client, input, ctx) {
+    const id = libraryIdSegment(input.library_id);
+    const makesNewLibrary = input.operation === 'union' || input.operation === 'intersection' || input.operation === 'difference';
+    const sources = input.source_library_ids ?? [];
+    if (makesNewLibrary && !sources.length) {
+        return notFound(`Error: source_library_ids is required for operation="${input.operation}".`);
+    }
+    if (input.operation === 'copy' && sources.length !== 1) {
+        return notFound('Error: operation="copy" needs exactly one library in source_library_ids: the existing library that receives the papers.');
+    }
+    if (input.operation === 'empty') {
+        const gate = await confirmDestructive(client, ctx, id, (name, n) => `Remove every paper from library ${name}${papersOf(n)}? This cannot be undone.`);
+        if (gate === 'cancelled')
+            return CANCELLED;
+        if (gate !== 'proceed')
+            return gate;
+    }
+    // Request shape per adsabs-dev-api openapi/services/biblib.yaml: name/description/public create the NEW library of
+    // union/intersection/difference; copy and empty take no metadata; empty takes no libraries.
+    const body = { action: input.operation };
+    if (input.operation !== 'empty' && sources.length)
+        body['libraries'] = sources.map(libraryIdSegment);
+    if (makesNewLibrary) {
+        if (input.name)
+            body['name'] = input.name;
+        if (input.description)
+            body['description'] = input.description;
+        if (input.public !== undefined)
+            body['public'] = input.public;
+    }
+    const data = await client.post(`biblib/libraries/operations/${id}`, body);
+    const newId = data.id ?? data.library_id;
+    const affected = data.bibcode?.length ?? data.number_added;
+    let out = `Library operation \`${input.operation}\` on \`${input.library_id}\` completed.\n`;
+    if (input.operation === 'copy')
+        out += `- **Papers written into existing library:** \`${sources[0]}\` (not emptied first)\n`;
+    if (newId)
+        out += `- **New library ID:** \`${newId}\`\n`;
+    if (affected !== undefined)
+        out += `- **Documents in the resulting library:** ${affected}\n`;
+    return {
+        text: out,
+        structured: {
+            library_id: input.library_id, operation: input.operation,
+            new_library_id: newId, documents_affected: affected,
+        },
+    };
+}
+export async function handleScixLibraryGetPermissions(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    const data = await client.get(`biblib/permissions/${id}`);
+    const collaborators = Object.entries(data.collaborators ?? {}).map(([email, permissions]) => ({ email, permissions }));
+    let out = `# Permissions for \`${input.library_id}\`\n\n`;
+    if (data.owner)
+        out += `- **Owner:** ${data.owner}\n`;
+    if (collaborators.length === 0)
+        out += '\nNo collaborators.\n';
+    else {
+        out += '\n## Collaborators\n\n';
+        for (const c of collaborators)
+            out += `- **${c.email}:** ${c.permissions.join(', ')}\n`;
+    }
+    return { text: out, structured: { library_id: input.library_id, owner: data.owner, collaborators } };
+}
+export async function handleScixLibraryUpdatePermissions(client, input) {
+    const id = libraryIdSegment(input.library_id);
+    await client.post(`biblib/permissions/${id}`, { email: input.email, permission: input.permission });
+    return {
+        text: `Permission \`${input.permission}\` granted to ${input.email} on library \`${input.library_id}\`.`,
+        structured: { library_id: input.library_id, email: input.email, permission: input.permission },
+    };
+}
+export async function handleScixLibraryTransfer(client, input, ctx) {
+    const id = libraryIdSegment(input.library_id);
+    const gate = await confirmDestructive(client, ctx, id, (name, n) => `Transfer ownership of library ${name}${papersOf(n)} to ${input.email}? You will lose ownership.`);
+    if (gate === 'cancelled')
+        return CANCELLED;
+    if (gate !== 'proceed')
+        return gate;
+    await client.post(`biblib/transfer/${id}`, { email: input.email });
+    return {
+        text: `Library \`${input.library_id}\` transferred to ${input.email}.`,
+        structured: { library_id: input.library_id, email: input.email, transferred: true },
+    };
+}
+export async function handleScixLibraryNote(client, input) {
+    // biblib OpenAPI: /biblib/notes/{library_id}/{document_id}
+    const endpoint = `biblib/notes/${libraryIdSegment(input.library_id)}/${bibcodeSegment(input.bibcode)}`;
+    const base = { library_id: input.library_id, bibcode: input.bibcode, action: input.action };
+    if (input.action === 'get') {
+        let data = {};
+        try {
+            data = await client.get(endpoint);
+        }
+        catch (e) {
+            // Measured live: a missing note is HTTP 400 "Note does not exist ...", not an empty 200.
+            if (!(e instanceof ScixApiError && e.status === 400 && /note does not exist/i.test(e.body)))
+                throw e;
+        }
+        // biblib OpenAPI: the note comes nested as { document, note: { content, ... } }.
+        const note = data.note ?? data;
+        if (!note.content) {
+            return {
+                text: `No note found for \`${input.bibcode}\` in library \`${input.library_id}\`.`,
+                structured: { ...base },
+            };
+        }
+        let out = `# Note for \`${input.bibcode}\`\n\n`;
+        out += note.content + '\n\n';
+        if (note.date_last_modified)
+            out += `*Last updated: ${note.date_last_modified.slice(0, 10)}*\n`;
+        return {
+            text: out,
+            structured: { ...base, content: note.content, date_last_modified: note.date_last_modified },
+        };
+    }
+    if (input.action === 'set') {
+        if (!input.content)
+            return notFound('Error: content is required for action="set"');
+        try {
+            await client.post(endpoint, { content: input.content });
+        }
+        catch (e) {
+            // Measured live: one note per paper, so a second POST is 409 "Note for this document already exists."
+            if (!(e instanceof ScixApiError && e.status === 409))
+                throw e;
+            await client.put(endpoint, { content: input.content });
+        }
+        return {
+            text: `Note saved for \`${input.bibcode}\` in library \`${input.library_id}\`.`,
+            structured: { ...base },
+        };
+    }
+    await client.delete(endpoint);
+    return {
+        text: `Note deleted for \`${input.bibcode}\` in library \`${input.library_id}\`.`,
+        structured: { ...base },
+    };
+}
+// ── Registration ─────────────────────────────────────────────────────────────
+export function registerScixLibraryTools(server) {
+    addTool(server, 'scix_library_list', {
+        title: 'List SciX libraries',
+        description: 'List your SciX personal libraries (saved paper collections). ' +
+            'Returns library IDs, names, paper counts, and permissions.',
+        inputSchema: scixLibraryListSchema,
+        outputSchema: listOutput(libraryOut),
+        annotations: READ_EXTERNAL,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryList(getScixClient(), input));
+    addTool(server, 'scix_library_get', {
+        title: 'Get SciX library',
+        description: 'Get the contents and metadata of a specific SciX library by its ID.',
+        inputSchema: scixLibraryGetSchema,
+        outputSchema: z.object({ library: libraryOut, documents: z.array(z.string()) }),
+        annotations: READ_EXTERNAL,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryGet(getScixClient(), input));
+    addTool(server, 'scix_library_create', {
+        title: 'Create SciX library',
+        description: 'Create a new personal library in SciX to save and organize papers.',
+        inputSchema: scixLibraryCreateSchema,
+        outputSchema: z.object({ id: z.string(), name: z.string(), papers_added: z.number() }),
+        annotations: CREATE_REMOTE,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryCreate(getScixClient(), input));
+    addTool(server, 'scix_library_edit', {
+        title: 'Edit SciX library',
+        description: 'Rename a SciX library or change its description or public/private visibility. ' +
+            'Pass only the fields to change.',
+        inputSchema: scixLibraryEditSchema,
+        outputSchema: z.object({ library: libraryOut, updated: z.array(z.string()) }),
+        annotations: MUTATE_REMOTE_IDEMPOTENT,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryEdit(getScixClient(), input));
+    addTool(server, 'scix_library_delete', {
+        title: 'Delete SciX library',
+        description: 'Permanently delete a SciX library and its notes. Cannot be undone. ' +
+            'Clients that support elicitation are asked to confirm first.',
+        inputSchema: scixLibraryDeleteSchema,
+        outputSchema: z.object({ library_id: z.string(), deleted: z.boolean() }),
+        annotations: DESTRUCTIVE_REMOTE,
+        icons: SCIX_ICONS,
+    }, (input, ctx) => handleScixLibraryDelete(getScixClient(), input, ctx));
+    addTool(server, 'scix_library_documents', {
+        title: 'Add or remove library papers',
+        description: 'Add or remove papers from a SciX library. Pass bibcodes and "add" or "remove".',
+        inputSchema: scixLibraryDocumentsSchema,
+        outputSchema: z.object({
+            library_id: z.string(), action: z.enum(['add', 'remove']), changed: z.number(),
+        }),
+        annotations: MUTATE_REMOTE_IDEMPOTENT,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryDocuments(getScixClient(), input));
+    addTool(server, 'scix_library_add_by_query', {
+        title: 'Add search results to library',
+        description: 'Run a SciX search query and add its top results (up to "rows") to a library. ' +
+            'Falls back to search-then-add when the query endpoint is unavailable.',
+        inputSchema: scixLibraryAddByQuerySchema,
+        outputSchema: z.object({
+            library_id: z.string(), query: z.string(), requested: z.number(),
+            found: z.number(), added: z.number(), via: z.enum(['query_endpoint', 'search_fallback']),
+        }),
+        annotations: MUTATE_REMOTE_IDEMPOTENT,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryAddByQuery(getScixClient(), input));
+    addTool(server, 'scix_library_operation', {
+        title: 'Library set operation',
+        description: 'Combine libraries into a NEW library (union, intersection, difference; optional name/description/public), copy the papers of one library into an EXISTING one (copy), or empty a library. ' +
+            '"empty" removes every paper from the target library; clients that support elicitation are asked to confirm first.',
+        inputSchema: scixLibraryOperationSchema,
+        outputSchema: z.object({
+            library_id: z.string(), operation: z.enum(['union', 'intersection', 'difference', 'copy', 'empty']),
+            new_library_id: z.string().optional(), documents_affected: z.number().optional(),
+        }),
+        annotations: DESTRUCTIVE_REMOTE,
+        icons: SCIX_ICONS,
+    }, (input, ctx) => handleScixLibraryOperation(getScixClient(), input, ctx));
+    addTool(server, 'scix_library_get_permissions', {
+        title: 'Get library permissions',
+        description: 'List who owns a SciX library and which collaborators have which permissions.',
+        inputSchema: scixLibraryGetPermissionsSchema,
+        outputSchema: z.object({
+            library_id: z.string(), owner: z.string().optional(),
+            collaborators: z.array(z.object({ email: z.string(), permissions: z.array(z.string()) })),
+        }),
+        annotations: READ_EXTERNAL,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryGetPermissions(getScixClient(), input));
+    addTool(server, 'scix_library_update_permissions', {
+        title: 'Update library permissions',
+        description: 'Grant or change a collaborator\'s permission (owner, admin, write, read) on a SciX library.',
+        inputSchema: scixLibraryUpdatePermissionsSchema,
+        outputSchema: z.object({ library_id: z.string(), email: z.string(), permission: z.string() }),
+        annotations: MUTATE_REMOTE_IDEMPOTENT,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryUpdatePermissions(getScixClient(), input));
+    addTool(server, 'scix_library_transfer', {
+        title: 'Transfer library ownership',
+        description: 'Transfer ownership of a SciX library to another user. You lose ownership. ' +
+            'Clients that support elicitation are asked to confirm first.',
+        inputSchema: scixLibraryTransferSchema,
+        outputSchema: z.object({ library_id: z.string(), email: z.string(), transferred: z.boolean() }),
+        annotations: DESTRUCTIVE_REMOTE,
+        icons: SCIX_ICONS,
+    }, (input, ctx) => handleScixLibraryTransfer(getScixClient(), input, ctx));
+    addTool(server, 'scix_library_note', {
+        title: 'Library paper note',
+        description: 'Get, set, or delete a personal annotation note for a paper in a SciX library.',
+        inputSchema: scixLibraryNoteSchema,
+        outputSchema: z.object({
+            library_id: z.string(),
+            bibcode: z.string(),
+            action: z.enum(['get', 'set', 'delete']),
+            content: z.string().optional(),
+            date_last_modified: z.string().optional(),
+        }),
+        annotations: MUTATE_REMOTE_IDEMPOTENT,
+        icons: SCIX_ICONS,
+    }, input => handleScixLibraryNote(getScixClient(), input));
+}
