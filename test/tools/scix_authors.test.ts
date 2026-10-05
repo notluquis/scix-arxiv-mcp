@@ -225,6 +225,36 @@ describe('scix_resolve_objects', () => {
     expect(out.structured['expanded_queries']).toEqual([{ name: 'M31', query: '((=abs:m31 OR simbid:1575544) database:astronomy)' }]);
   });
 
+  it('a name /objects returns null for (SIMBAD spacing) falls back to objects/query and extracts the simbid', async () => {
+    // Live shapes: POST /objects gives null for "NGC 6383" (SIMBAD wants "NGC  6383"); objects/query still resolves it.
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      return new Response(JSON.stringify(calls.length === 1
+        ? { 'NGC 6383': null }
+        : { query: '((=abs:"NGC 6383" OR simbid:"2382534" OR nedid:"NGC_6383") database:astronomy)' }), { status: 200 });
+    }) as typeof fetch;
+    const out = await handleScixResolveObjects(new ScixClient(), { names: ['NGC 6383'], source: 'simbad', expand_query: true });
+    expect(calls).toHaveLength(2); // the expansion is reused, not requested twice
+    expect(JSON.parse(calls[1][1]?.body as string)).toEqual({ query: ['object:"NGC 6383"'] });
+    expect(out.structured['items']).toEqual([{ input: 'NGC 6383', id: '2382534', canonical: null, resolved_via: 'query_expansion' }]);
+    expect(out.structured['expanded_queries']).toHaveLength(1);
+    expect(out.text).toContain('2382534');
+    expect(out.text).toContain('query expansion');
+    expect(out.text).not.toContain('not recognized');
+  });
+
+  it('a name that neither /objects nor objects/query resolves stays not recognized', async () => {
+    let n = 0;
+    global.fetch = (async () => {
+      n += 1;
+      return new Response(JSON.stringify(n === 1 ? { Nope: null } : { query: '((=abs:"Nope") database:astronomy)' }), { status: 200 });
+    }) as typeof fetch;
+    const out = await handleScixResolveObjects(new ScixClient(), { names: ['Nope'], source: 'simbad' });
+    expect(out.structured['items']).toEqual([{ input: 'Nope', id: null, canonical: null }]);
+    expect(out.text).toContain('not recognized');
+  });
+
   it('an Error key from objects/query is an error', async () => {
     let n = 0;
     global.fetch = (async () => {

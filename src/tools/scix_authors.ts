@@ -249,27 +249,44 @@ export async function handleScixResolveObjects(
   assertNoErrorKey(data, 'ADS objects service');
   const map = isRecord(data) ? data : {};
 
-  const items = input.names.map(name => {
+  const expansions = new Map<string, string>();
+  const expand = async (name: string): Promise<string> => {
+    const known = expansions.get(name);
+    if (known !== undefined) return known;
+    const r = await client.post('objects/query', { query: [`object:${solrPhrase(name)}`] }, { idempotent: true });
+    assertNoErrorKey(r, 'ADS objects/query service');
+    const query = isRecord(r) ? String(r['query'] ?? '') : '';
+    expansions.set(name, query);
+    return query;
+  };
+  // SIMBAD needs its canonical spacing ("NGC  6383"), so /objects answers null for "NGC 6383" while objects/query
+  // still expands it. For null names, take the identifier from the expansion instead of reporting "not recognized".
+  const idPattern = input.source === 'simbad' ? /simbid:"?(\d+)/ : /nedid:"?([^"\s)]+)/;
+
+  const items: { input: string; id: string | null; canonical: string | null; resolved_via?: 'query_expansion' }[] = [];
+  for (const name of input.names) {
     const hit = map[name];
     const rec = isRecord(hit) ? hit : undefined;
-    return {
+    const item: (typeof items)[number] = {
       input: name,
       id: rec?.['id'] == null ? null : String(rec['id']),
       canonical: rec?.['canonical'] == null ? null : String(rec['canonical']),
     };
-  });
+    if (item.id === null && item.canonical === null) {
+      const id = idPattern.exec(await expand(name))?.[1];
+      if (id) { item.id = id; item.resolved_via = 'query_expansion'; }
+    }
+    items.push(item);
+  }
 
   const structured: Record<string, unknown> = { source: input.source, items };
   let text = `# Objects (${input.source})\n\n` +
-    items.map(i => `- ${i.input} → ${i.canonical ?? 'not recognized'}${i.id ? ` (id ${i.id})` : ''}`).join('\n') + '\n';
+    items.map(i => `- ${i.input} → ${i.canonical ?? (i.resolved_via ? `resolved via query expansion` : 'not recognized')}` +
+      `${i.id ? ` (id ${i.id})` : ''}`).join('\n') + '\n';
 
   if (input.expand_query) {
     const expanded: Array<{ name: string; query: string }> = [];
-    for (const name of input.names) {
-      const r = await client.post('objects/query', { query: [`object:${solrPhrase(name)}`] }, { idempotent: true });
-      assertNoErrorKey(r, 'ADS objects/query service');
-      expanded.push({ name, query: isRecord(r) ? String(r['query'] ?? '') : '' });
-    }
+    for (const name of input.names) expanded.push({ name, query: await expand(name) });
     structured['expanded_queries'] = expanded;
     text += `\n## Expanded queries\n\n` + expanded.map(e => `- ${e.name}: \`${e.query}\``).join('\n') + '\n';
   }
@@ -389,12 +406,16 @@ export function registerScixAuthorTools(server: McpServer): void {
     title: 'Resolve astronomical objects',
     description:
       'Resolve object names (M31, NGC 1275, ...) to SIMBAD or NED identifiers and canonical names. ' +
-      'expand_query also returns the Solr query that includes those identifiers. ' +
+      'Names SIMBAD does not match by spelling (it wants its own spacing, e.g. "NGC  6383") are retried through query ' +
+      'expansion and returned with resolved_via="query_expansion". expand_query also returns the Solr query that includes those identifiers. ' +
       'You usually do not need this: scix_search accepts object:"M31" directly.',
     inputSchema: scixResolveObjectsSchema,
     outputSchema: z.object({
       source: z.string(),
-      items: z.array(z.object({ input: z.string(), id: z.string().nullable(), canonical: z.string().nullable() })),
+      items: z.array(z.object({
+        input: z.string(), id: z.string().nullable(), canonical: z.string().nullable(),
+        resolved_via: z.literal('query_expansion').optional(),
+      })),
       expanded_queries: z.array(z.object({ name: z.string(), query: z.string() })).optional(),
     }),
     annotations: READ_EXTERNAL,

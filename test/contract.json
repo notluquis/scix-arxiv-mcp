@@ -1018,7 +1018,7 @@
         "openWorldHint": true,
         "readOnlyHint": true
       },
-      "description": "Resolve object names (M31, NGC 1275, ...) to SIMBAD or NED identifiers and canonical names. expand_query also returns the Solr query that includes those identifiers. You usually do not need this: scix_search accepts object:\"M31\" directly.",
+      "description": "Resolve object names (M31, NGC 1275, ...) to SIMBAD or NED identifiers and canonical names. Names SIMBAD does not match by spelling (it wants its own spacing, e.g. \"NGC  6383\") are retried through query expansion and returned with resolved_via=\"query_expansion\". expand_query also returns the Solr query that includes those identifiers. You usually do not need this: scix_search accepts object:\"M31\" directly.",
       "icons": [
         {
           "mimeType": "image/svg+xml",
@@ -1111,6 +1111,10 @@
                   ]
                 },
                 "input": {
+                  "type": "string"
+                },
+                "resolved_via": {
+                  "const": "query_expansion",
                   "type": "string"
                 }
               },
