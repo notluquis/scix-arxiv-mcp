@@ -82,7 +82,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f build
+          # npm (pacote) prepares a git dependency with a full `npm install`, devDependencies
+          # included, whenever scripts.build exists. Make the release commit a plain prebuilt package.
+          npm pkg delete scripts devDependencies
+          git add -f build package.json
           git commit -m "release: $REF_NAME (build/ included)"
           git tag -f stable HEAD
 
