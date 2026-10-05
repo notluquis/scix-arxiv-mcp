@@ -217,7 +217,25 @@ function joinNorm(dir: string, ref: string): string | undefined {
   return parts.join('/');
 }
 
-const isCommented = (text: string, at: number): boolean => /(?<!\\)%/.test(text.slice(text.lastIndexOf('\n', at - 1) + 1, at));
+/**
+ * Linear-time "is offset `at` inside a % comment?" for one text. A `%` not preceded by a backslash
+ * comments out the rest of its line. State is carried forward between calls (queries normally ascend);
+ * a query behind the cursor restarts from 0, so any order is correct. Rescanning from the line start
+ * on every call was quadratic on single-line sources (1 MB took 32 s).
+ */
+function commentChecker(text: string): (at: number) => boolean {
+  let pos = 0;
+  let inComment = false;
+  return (at: number): boolean => {
+    if (at < pos) { pos = 0; inComment = false; }
+    for (; pos < at; pos++) {
+      const c = text.charCodeAt(pos);
+      if (c === 10) inComment = false;
+      else if (c === 37 && !inComment && (pos === 0 || text.charCodeAt(pos - 1) !== 92)) inComment = true;
+    }
+    return inComment;
+  };
+}
 
 export interface Flattened {
   main: string;
@@ -264,8 +282,9 @@ export function flattenLatex(files: Map<string, string>, limits: LatexLimits = L
       throw new LatexSourceError(`Flattening the \\input tree exceeds ${limits.maxFlatChars} characters; refusing to continue.`);
     }
     included.push(name);
-    return text.replace(INCLUDE_RE, (match: string, kind: string, braced: string | undefined, bare: string | undefined, at: number, whole: string) => {
-      if (isCommented(whole, at)) return match;
+    const isCommented = commentChecker(text);
+    return text.replace(INCLUDE_RE, (match: string, kind: string, braced: string | undefined, bare: string | undefined, at: number) => {
+      if (isCommented(at)) return match;
       const ref = (braced ?? bare ?? '').trim();
       const target = ref ? resolve(ref, dirOf(name)) : undefined;
       if (!target) { if (ref) unmatched.add(ref); return match; }
@@ -340,13 +359,14 @@ export function parseLatexSections(text: string): LatexSection[] {
     const m = /\\end\{document\}/.exec(text);
     return m ? m.index : text.length;
   })();
-  const bibs = [...text.matchAll(BIB_RE)].filter(m => !isCommented(text, m.index)).map(m => m.index);
+  const isCommented = commentChecker(text);
+  const bibs = [...text.matchAll(BIB_RE)].filter(m => !isCommented(m.index)).map(m => m.index);
 
   interface Head { level: number; title: string; at: number; bodyStart: number; appendix: boolean }
   const heads: Head[] = [];
   let appendix = false;
   for (const m of text.matchAll(HEADING_RE)) {
-    if (isCommented(text, m.index) || m.index >= docEnd) continue;
+    if (isCommented(m.index) || m.index >= docEnd) continue;
     if (m[1].startsWith('appendix')) { appendix = true; continue; }
     const open = m.index + m[0].length;
     if (text[open] !== '{') continue;
@@ -363,7 +383,7 @@ export function parseLatexSections(text: string): LatexSection[] {
 
   const sections: LatexSection[] = [];
   const abs = /\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/.exec(text);
-  if (abs && !isCommented(text, abs.index) && (heads.length === 0 || abs.index < heads[0].at)) {
+  if (abs && !isCommented(abs.index) && (heads.length === 0 || abs.index < heads[0].at)) {
     const start = abs.index + '\\begin{abstract}'.length;
     sections.push({ id: 'abstract', level: 1, title: 'Abstract', start, end: start + abs[1].length });
   }

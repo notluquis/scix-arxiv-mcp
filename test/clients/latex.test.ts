@@ -239,3 +239,19 @@ describe('stripLatexCommands', () => {
   });
 });
 
+
+describe('comment detection is linear', () => {
+  it('a ~1 MB single-line source with many \\section and \\input finishes under 1 s', () => {
+    const unit = '\\section{a}\\input{x}';
+    const big = unit.repeat(Math.ceil(1_000_000 / unit.length));
+    const t0 = performance.now();
+    parseLatexSections(big);
+    flattenLatex(asMap({ 'main.tex': `\\documentclass{x}\\begin{document}${big}\\end{document}` }));
+    expect(performance.now() - t0).toBeLessThan(1000);
+  }, 120_000);
+
+  it('keeps escaped \\% and comment semantics when state is carried forward', () => {
+    const t = '100\\% \\section{Real}\n% \\section{Gone} 50\\% \\section{AlsoGone}\n\\section{Back}';
+    expect(parseLatexSections(t).map(s => s.title)).toEqual(['Real', 'Back']);
+  });
+});
