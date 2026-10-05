@@ -187,7 +187,7 @@ async function checkOne(w: Watch): Promise<{ result: WatchResult; changed: boole
   const mark = ms(w.last_checked);
   if (Number.isNaN(mark)) throw new Error(`stored last_checked ${JSON.stringify(w.last_checked)} is not a date`);
   const limit = w.max_results + OVERFETCH;
-  const raw = await arxivSearch(`(${w.topic})`, {
+  const raw = await arxivSearch(w.topic, {
     maxResults: limit,
     sortBy: 'submittedDate',
     sortOrder: 'ascending',

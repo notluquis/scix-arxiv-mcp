@@ -57,6 +57,15 @@ describe('arxiv_watch_topic', () => {
     expect(decodeURIComponent(urls[0]!)).toContain('submittedDate:[202610041200+TO+202610041205]');
   });
 
+  it('plain-word topics are ANDed in the request, not treated as arXiv syntax', async () => {
+    at('2026-10-04T12:00:00Z');
+    const urls = fakeArxiv([]);
+    await handleArxivWatchTopic({ topic: 'dark matter' });
+    at('2026-10-04T12:05:00Z');
+    await handleArxivCheckAlerts({});
+    expect(decodeURIComponent(urls[0]!)).toContain('all:dark+AND+all:matter');
+  });
+
   it('categories: kept when omitted, replaced when given, cleared by []; each reaches the query', async () => {
     at('2026-10-04T12:00:00Z');
     const urls = fakeArxiv([]);
@@ -180,7 +189,7 @@ describe('arxiv_check_alerts topic filter', () => {
     at('2026-10-04T13:00:00Z');
     const r = await handleArxivCheckAlerts({ topic: 'alpha' });
     expect(urls).toHaveLength(1);
-    expect(decodeURIComponent(urls[0]!)).toContain('(alpha)');
+    expect(decodeURIComponent(urls[0]!)).toContain('(all:alpha)');
     expect(ids(r)).toEqual(['X1']);
     const listed = await handleArxivListWatches({});
     const w = Object.fromEntries((listed.structured['watches'] as { topic: string; last_checked: string }[]).map(x => [x.topic, x.last_checked]));
