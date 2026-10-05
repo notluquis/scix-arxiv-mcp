@@ -338,3 +338,48 @@ describe('scix_resolve_references', () => {
     expect(out.structured).toMatchObject({ total: 1, items: [{ bibcode: 'B', score: 0.9 }] });
   });
 });
+
+describe('scix_search object: expansion', () => {
+  const LIVE = '((=abs:"HD 159176" OR simbid:"2383241" OR nedid:"V1036_Sco") database:astronomy)';
+  const route = (searchDocs: unknown[] = [DOC]) => {
+    const calls: Array<{ url: string; body?: unknown }> = [];
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body as string) : undefined });
+      return new Response(JSON.stringify(String(url).includes('objects/query')
+        ? { query: LIVE } : { response: { numFound: searchDocs.length, docs: searchDocs } }), { status: 200 });
+    }) as typeof fetch;
+    return calls;
+  };
+  const search = (query: string) => handleScixSearch(new ScixClient(), { query, rows: 10, start: 0 } as Parameters<typeof handleScixSearch>[1]);
+  const qOf = (url: string) => new URL(url).searchParams.get('q');
+
+  it('expands object:"..." through POST objects/query and searches with the returned query', async () => {
+    const calls = route();
+    const out = await search('object:"HD 159176"');
+    expect(calls[0]!.url).toMatch(/objects\/query$/);
+    expect(calls[0]!.body).toEqual({ query: ['object:"HD 159176"'] });
+    expect(qOf(calls[1]!.url)).toBe(LIVE);
+    expect(out.structured).toMatchObject({ total: 1 });
+  });
+
+  it('substitutes in a mixed query, handles unquoted terms, and leaves quoted text alone', async () => {
+    const calls = route();
+    await search('object:"HD 159176" year:2020 AND abs:"the object:x thing" AND object:M31');
+    expect(calls.filter(c => c.url.includes('objects/query')).map(c => c.body)).toEqual([
+      { query: ['object:"HD 159176"'] }, { query: ['object:M31'] },
+    ]);
+    expect(qOf(calls.at(-1)!.url)).toBe(`${LIVE} year:2020 AND abs:"the object:x thing" AND ${LIVE}`);
+  });
+
+  it('a query without object: makes no objects/query request', async () => {
+    const calls = route();
+    await search('author:"Sana, H" year:2012');
+    expect(calls).toHaveLength(1);
+    expect(qOf(calls[0]!.url)).toBe('author:"Sana, H" year:2012');
+  });
+
+  it('an objects/query answer without a query is an error, not a silent unexpanded search', async () => {
+    global.fetch = (async () => new Response(JSON.stringify({ query: '' }), { status: 200 })) as typeof fetch;
+    await expect(search('object:"Nope"')).rejects.toThrow(/could not expand/);
+  });
+});

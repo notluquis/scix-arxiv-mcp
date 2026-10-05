@@ -86,12 +86,33 @@ export const scixSearchSchema = z.object({
   response_format: responseFormat,
 });
 
+/**
+ * The ADS search API has no `object` field (`q=object:"HD 159176"` is HTTP 400 "undefined field object"); the web UI
+ * expands it through POST /objects/query. Each `object:"..."` / `object:term` outside a quoted phrase is expanded
+ * separately (whether objects/query accepts a mixed query is unverified) and substituted in place.
+ */
+export async function expandObjectTerms(client: ScixClient, query: string): Promise<string> {
+  const term = /"(?:[^"\\]|\\.)*"|\bobject:("(?:[^"\\]|\\.)*"|[^\s()]+)/g;
+  const found = new Set<string>();
+  for (const m of query.matchAll(term)) if (m[1] !== undefined) found.add(m[0]);
+  if (found.size === 0) return query;
+
+  const expanded = new Map<string, string>();
+  for (const t of found) {
+    const r = await client.post('objects/query', { query: [t] }, { idempotent: true });
+    const q = typeof r === 'object' && r !== null && !Array.isArray(r) ? (r as Record<string, unknown>)['query'] : undefined;
+    if (typeof q !== 'string' || !q) throw new Error(`ADS objects/query could not expand ${t}: ${JSON.stringify(r)}`);
+    expanded.set(t, q);
+  }
+  return query.replace(term, (m, name: string | undefined) => (name === undefined ? m : expanded.get(m) ?? m));
+}
+
 export async function handleScixSearch(
   client: ScixClient,
   input: In<typeof scixSearchSchema>
 ): Promise<ToolOut> {
   const data = await client.get('search/query', {
-    q: input.query,
+    q: await expandObjectTerms(client, input.query),
     fl: DEFAULT_FIELDS,
     rows: input.rows,
     start: input.start,
@@ -390,8 +411,8 @@ export function registerScixTools(server: McpServer): void {
       'Query syntax is Solr: field:value, AND/OR/NOT, wildcards, year:2020-2024. Useful fields and operators: ' +
       'author:"Last, F" (author:"^Last" = first author), abs:, title:, bibcode:, doi:, orcid:, ' +
       'uat:"UAT keyword", has:body (full text indexed) and other has: fields, ' +
-      'planetary_feature:"...", object:"M31" (resolved through SIMBAD/NED directly, no need for ' +
-      'scix_resolve_objects first), citations(...), references(...), similar(...), topn(). ' +
+      'planetary_feature:"...", object:"M31" (expanded to SIMBAD/NED identifiers through the ADS objects service before ' +
+      'searching, and restricted to database:astronomy; no need for scix_resolve_objects first), citations(...), references(...), similar(...), topn(). ' +
       '`collection` limits to astronomy, physics or general. ' +
       'ADS is being replaced by SciX on 2026-11-16; the corpus then grows to about 36M records, adding the ' +
       'earth-science and heliophysics collections. ' +
