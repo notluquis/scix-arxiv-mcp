@@ -1,6 +1,6 @@
 {
   "name": "scix-arxiv-mcp",
-  "version": "2.0.0-dev",
+  "version": "2.0.0",
   "description": "Local stdio MCP server for SciX (NASA ADS) and arXiv (MCP 2026-07-28)",
   "license": "MIT",
   "author": "Lucas Pulgar Escobar",
