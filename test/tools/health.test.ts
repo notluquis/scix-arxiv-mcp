@@ -24,6 +24,7 @@ describe('health_check', () => {
     const { report, text } = await health();
 
     expect(report.scix_token_configured).toBe(false);
+    expect(report.semantic_scholar_key_configured).toBe(false);
     expect(report.ads_probe.state).toBe('skipped');
     expect(report.protocol).toBe('2026-07-28');
     expect(report.tool_count).toBe(39);
@@ -31,6 +32,16 @@ describe('health_check', () => {
     expect(report.server.sdk_version).toMatch(/^\d+\.\d+\.\d+/);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(text).toContain('SciX token configured:** no');
+  });
+
+  it('reports the Semantic Scholar key as configured without printing it; the placeholder counts as unset', async () => {
+    vi.stubEnv('SEMANTIC_SCHOLAR_API_KEY', 's2-secret-value');
+    let { report, text } = await health();
+    expect(report.semantic_scholar_key_configured).toBe(true);
+    expect(text).not.toContain('s2-secret-value');
+    vi.stubEnv('SEMANTIC_SCHOLAR_API_KEY', '${user_config.semantic_scholar_api_key}');
+    ({ report } = await health());
+    expect(report.semantic_scholar_key_configured).toBe(false);
   });
 
   it('with a token: probes search/query once and never prints the token', async () => {
