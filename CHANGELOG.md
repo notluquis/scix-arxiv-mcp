@@ -1,6 +1,14 @@
 # Changelog
 
-## [2.0.0] - Unreleased
+## [2.0.1] - 2026-10-05
+
+### Fixed
+
+- LaTeX section titles: nested formatting commands (`\textbf{\textit{…}}`) are fully unwrapped.
+- Network errors on idempotent requests are retried with backoff; mutations and caller aborts are not.
+- SciX library edits (PUT) are retried on 503. DELETE stays single-shot, because biblib answers 410 to a repeated DELETE.
+
+## [2.0.0] - 2026-10-05
 
 Rewrite as a local stdio server for MCP protocol 2026-07-28 only. Requires Claude Code >= 2.1.285 and Node >= 24.
 
